@@ -2,11 +2,13 @@
 // NextAuth v4 Configuration - The Brain of Authentication
 // -------------------------------------------------------------
 //
-// WHY v4 (NOT v5):
-// - v4 is stable, battle-tested, works perfectly with Next.js 16
-// - v4 uses `authOptions` object (cleaner for our needs)
-// - v4's `withAuth` middleware works reliably in Next.js 16
-// - v5 is still in beta and has issues with Next.js 16
+// SUPPORTS:
+//   - Credentials (email + password)
+//   - Google OAuth
+//
+// STRATEGY:
+// JWT sessions. Google account links are stored in the
+// `accounts` table.
 //
 // WHAT THIS FILE EXPORTS:
 //   - authOptions : the config object used by NextAuth and
@@ -19,6 +21,7 @@
 // -------------------------------------------------------------
 
 import CredentialsProvider from 'next-auth/providers/credentials';
+import GoogleProvider from 'next-auth/providers/google';
 import bcrypt from 'bcryptjs';
 
 import { prisma } from '@/lib/prisma';
@@ -29,6 +32,7 @@ export const authOptions = {
   // PROVIDERS - How does a user log in?
   // -----------------------------------------------------------
   providers: [
+    // --- Credentials (email + password) ---
     CredentialsProvider({
       name: 'Credentials',
 
@@ -71,6 +75,17 @@ export const authOptions = {
         };
       },
     }),
+
+    // --- Google OAuth ---
+    // Client ID + Secret come from Google Cloud Console.
+    // The redirect URI configured there must point to:
+    //   http://localhost:3000/api/auth/callback/google
+    //   https://your-app.vercel.app/api/auth/callback/google
+    GoogleProvider({
+      clientId: process.env.GOOGLE_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      allowDangerousEmailAccountLinking: true
+    }),
   ],
 
   // -----------------------------------------------------------
@@ -92,7 +107,12 @@ export const authOptions = {
   // CALLBACKS
   // -----------------------------------------------------------
   callbacks: {
-    // Copy user.id into the JWT token.
+    // -------------------------------------------------------
+    // jwt() - runs when a JWT is created or updated.
+    // -------------------------------------------------------
+    // On first sign-in (either provider), copy `user.id` into
+    // the token. Note: for OAuth, NextAuth's adapter creates
+    // the User row and gives us the DB id here.
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id;
@@ -100,7 +120,10 @@ export const authOptions = {
       return token;
     },
 
-    // Copy token.id into session.user.id.
+    // -------------------------------------------------------
+    // session() - runs when the session is read.
+    // -------------------------------------------------------
+    // Expose `token.id` as `session.user.id`.
     async session({ session, token }) {
       if (token && session.user) {
         session.user.id = token.id;
@@ -113,6 +136,14 @@ export const authOptions = {
   // SECRET - signs the JWT
   // -----------------------------------------------------------
   secret: process.env.NEXTAUTH_SECRET,
+
+  // -----------------------------------------------------------
+  // TRUST HOST
+  // -----------------------------------------------------------
+  // Required for Next.js 16 on Vercel. Without it, you get
+  // "UntrustedHost" errors because Next.js 16 doesn't set the
+  // host header the way NextAuth v4 expects.
+  trustHost: true,
 
   // -----------------------------------------------------------
   // DEBUG - verbose logs in dev only
