@@ -1,13 +1,19 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { signIn } from 'next-auth/react';
 
 import { registerSchema } from '@/lib/validators/auth';
 
-const RegisterPage = () => {
+// -------------------------------------------------------------
+// INNER COMPONENT - the actual register form
+// -------------------------------------------------------------
+// Wrapped in <Suspense> by the outer page. This keeps the
+// pattern consistent with the login page and prevents any
+// future SSR/prerender issues if we add useSearchParams.
+const RegisterForm = () => {
   const [form, setForm] = useState({
     name: '',
     email: '',
@@ -89,20 +95,12 @@ const RegisterPage = () => {
   };
 
   return (
-    <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl p-8 border border-gray-200 dark:border-gray-800">
-      {/* Header */}
-      <div className="text-center mb-8">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-          Create your TeamFlow account
-        </h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
-          Start managing projects with your team
-        </p>
-      </div>
-
+    <>
       {serverError && (
         <div className="mb-4 p-3 rounded-lg bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-900">
-          <p className="text-sm text-red-700 dark:text-red-300">{serverError}</p>
+          <p className="text-sm text-red-700 dark:text-red-300">
+            {serverError}
+          </p>
         </div>
       )}
 
@@ -133,10 +131,14 @@ const RegisterPage = () => {
         </div>
       </div>
 
+      {/* Form */}
       <form onSubmit={handleSubmit} className="space-y-4" noValidate>
         {/* Name */}
         <div>
-          <label htmlFor="name" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+          <label
+            htmlFor="name"
+            className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+          >
             Name
           </label>
           <input
@@ -149,12 +151,17 @@ const RegisterPage = () => {
             autoComplete="name"
             className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
-          {errors.name && <p className="text-xs text-red-600 mt-1">{errors.name}</p>}
+          {errors.name && (
+            <p className="text-xs text-red-600 mt-1">{errors.name}</p>
+          )}
         </div>
 
         {/* Email */}
         <div>
-          <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+          <label
+            htmlFor="email"
+            className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+          >
             Email
           </label>
           <input
@@ -167,12 +174,17 @@ const RegisterPage = () => {
             autoComplete="email"
             className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
-          {errors.email && <p className="text-xs text-red-600 mt-1">{errors.email}</p>}
+          {errors.email && (
+            <p className="text-xs text-red-600 mt-1">{errors.email}</p>
+          )}
         </div>
 
         {/* Password */}
         <div>
-          <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+          <label
+            htmlFor="password"
+            className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+          >
             Password
           </label>
           <input
@@ -185,12 +197,17 @@ const RegisterPage = () => {
             autoComplete="new-password"
             className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
-          {errors.password && <p className="text-xs text-red-600 mt-1">{errors.password}</p>}
+          {errors.password && (
+            <p className="text-xs text-red-600 mt-1">{errors.password}</p>
+          )}
         </div>
 
         {/* Confirm Password */}
         <div>
-          <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+          <label
+            htmlFor="confirmPassword"
+            className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+          >
             Confirm Password
           </label>
           <input
@@ -204,7 +221,9 @@ const RegisterPage = () => {
             className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
           {errors.confirmPassword && (
-            <p className="text-xs text-red-600 mt-1">{errors.confirmPassword}</p>
+            <p className="text-xs text-red-600 mt-1">
+              {errors.confirmPassword}
+            </p>
           )}
         </div>
 
@@ -220,10 +239,41 @@ const RegisterPage = () => {
 
       <p className="text-center text-sm text-gray-600 dark:text-gray-400 mt-6">
         Already have an account?{' '}
-        <Link href="/login" className="text-indigo-600 hover:text-indigo-700 font-medium">
+        <Link
+          href="/login"
+          className="text-indigo-600 hover:text-indigo-700 font-medium"
+        >
           Log in
         </Link>
       </p>
+    </>
+  );
+};
+
+// -------------------------------------------------------------
+// PAGE - wraps the form in Suspense
+// -------------------------------------------------------------
+const RegisterPage = () => {
+  return (
+    <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl p-8 border border-gray-200 dark:border-gray-800">
+      {/* Header */}
+      <div className="text-center mb-8">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+          Create your TeamFlow account
+        </h1>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
+          Start managing projects with your team
+        </p>
+      </div>
+
+      {/* 🔑 Wrapped in Suspense for Next.js 16 safety */}
+      <Suspense
+        fallback={
+          <div className="text-center text-sm text-gray-500">Loading…</div>
+        }
+      >
+        <RegisterForm />
+      </Suspense>
     </div>
   );
 };

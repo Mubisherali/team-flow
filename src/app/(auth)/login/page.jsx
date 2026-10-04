@@ -1,13 +1,18 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { signIn } from 'next-auth/react';
 
 import { loginSchema } from '@/lib/validators/auth';
 
-const LoginPage = () => {
+// -------------------------------------------------------------
+// INNER COMPONENT - uses useSearchParams()
+// -------------------------------------------------------------
+// Must be wrapped in <Suspense>. Next.js needs to know this
+// component can't be statically prerendered.
+const LoginForm = () => {
   const [form, setForm] = useState({ email: '', password: '' });
   const [errors, setErrors] = useState({});
   const [serverError, setServerError] = useState('');
@@ -66,25 +71,13 @@ const LoginPage = () => {
     }
   };
 
-  // Google sign-in handler
   const handleGoogle = async () => {
     setServerError('');
     await signIn('google', { callbackUrl });
   };
 
   return (
-    <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl p-8 border border-gray-200 dark:border-gray-800">
-      {/* Header */}
-      <div className="text-center mb-8">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-          Welcome back
-        </h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
-          Log in to your TeamFlow account
-        </p>
-      </div>
-
-      {/* Server error banner */}
+    <>
       {serverError && (
         <div className="mb-4 p-3 rounded-lg bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-900">
           <p className="text-sm text-red-700 dark:text-red-300">{serverError}</p>
@@ -95,9 +88,8 @@ const LoginPage = () => {
       <button
         type="button"
         onClick={handleGoogle}
-        className="w-full flex items-center justify-center gap-3 py-2.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 font-medium hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors"
+        className="w-full flex items-center justify-center gap-3 py-2.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 font-medium hover:bg-gray-50 transition-colors"
       >
-        {/* Google logo (inline SVG) */}
         <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
           <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
           <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
@@ -121,7 +113,6 @@ const LoginPage = () => {
 
       {/* Form */}
       <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-        {/* Email */}
         <div>
           <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
             Email
@@ -139,7 +130,6 @@ const LoginPage = () => {
           {errors.email && <p className="text-xs text-red-600 mt-1">{errors.email}</p>}
         </div>
 
-        {/* Password */}
         <div>
           <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
             Password
@@ -157,7 +147,6 @@ const LoginPage = () => {
           {errors.password && <p className="text-xs text-red-600 mt-1">{errors.password}</p>}
         </div>
 
-        {/* Submit */}
         <button
           type="submit"
           disabled={loading}
@@ -167,13 +156,35 @@ const LoginPage = () => {
         </button>
       </form>
 
-      {/* Footer */}
       <p className="text-center text-sm text-gray-600 dark:text-gray-400 mt-6">
         Don&apos;t have an account?{' '}
         <Link href="/register" className="text-indigo-600 hover:text-indigo-700 font-medium">
           Create one
         </Link>
       </p>
+    </>
+  );
+};
+
+// -------------------------------------------------------------
+// PAGE - wraps the form in Suspense
+// -------------------------------------------------------------
+const LoginPage = () => {
+  return (
+    <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl p-8 border border-gray-200 dark:border-gray-800">
+      <div className="text-center mb-8">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+          Welcome back
+        </h1>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
+          Log in to your TeamFlow account
+        </p>
+      </div>
+
+      {/* 🔑 THE FIX: wrap LoginForm in Suspense */}
+      <Suspense fallback={<div className="text-center text-sm text-gray-500">Loading…</div>}>
+        <LoginForm />
+      </Suspense>
     </div>
   );
 };
