@@ -14,12 +14,16 @@
 
 'use client';
 
-import { useSession, signOut } from 'next-auth/react';
+import CreateWorkspaceModal from '@/components/workspace/CreateWorkspaceModal';
+import { useSession, signOut} from 'next-auth/react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
 export default function HomePage() {
   const { data: session, status } = useSession();
+  const [isOpen, setIsOpen] = useState(true);
+
   const router = useRouter();
 
   // -----------------------------------------------------------
@@ -90,6 +94,25 @@ export default function HomePage() {
       <pre style={{ background: '#f3f4f6', padding: 16, borderRadius: 6 }}>
         {JSON.stringify(session, null, 2)}
       </pre>
+
+
+
+// TEMPORARY test — remove later
+import { useState } from 'react';
+import CreateWorkspaceModal from '@/components/workspace/CreateWorkspaceModal';
+
+// Inside the component:
+const [isOpen, setIsOpen] = useState(true);
+// and render:
+<CreateWorkspaceModal
+  isOpen={isOpen}
+  onClose={() => setIsOpen(false)}
+  onCreated={(ws) => {
+    console.log('Created:', ws);
+    setIsOpen(false);
+  }}
+/>
+
     </div>
   );
 }
