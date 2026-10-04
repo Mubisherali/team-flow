@@ -26,6 +26,11 @@ import { PrismaClient } from '@prisma/client';
 // We attach Prisma to it so it survives hot reloads.
 const globalForPrisma = globalThis;
 
+if (!process.env.DATABASE_URL) {
+  throw new Error(
+    '[prisma] DATABASE_URL is not set. Check your .env.local (dev) or Vercel environment variables (prod).'
+  );
+}
 // Reuse the existing client if it exists, otherwise create a new one.
 export const prisma =
   globalForPrisma.prisma ??
