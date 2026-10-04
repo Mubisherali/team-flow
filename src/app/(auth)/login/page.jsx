@@ -2,26 +2,24 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { signIn } from 'next-auth/react';
 
 import { loginSchema } from '@/lib/validators/auth';
 
 const LoginPage = () => {
-  const [form, setForm] = useState({
-    email: '',
-    password: '',
-  });
+  const [form, setForm] = useState({ email: '', password: '' });
   const [errors, setErrors] = useState({});
   const [serverError, setServerError] = useState('');
   const [loading, setLoading] = useState(false);
 
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const callbackUrl = searchParams.get('callbackUrl') || '/';
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     setForm((prev) => ({ ...prev, [name]: value }));
-
     if (errors[name]) {
       setErrors((prev) => ({ ...prev, [name]: undefined }));
     }
@@ -29,15 +27,12 @@ const LoginPage = () => {
   };
 
   const handleSubmit = async (e) => {
-    // FIX 1: proper statements, no comma tricks
     e.preventDefault();
     setServerError('');
     setErrors({});
     setLoading(true);
 
-    // ─── Client-side validation ───
     const parsed = loginSchema.safeParse(form);
-
     if (!parsed.success) {
       const fieldErrors = {};
       for (const issue of parsed.error.issues) {
@@ -49,9 +44,7 @@ const LoginPage = () => {
       return;
     }
 
-    // ─── Submit to NextAuth ───
     try {
-      // FIX 2: provider id is lowercase "credentials"
       const result = await signIn('credentials', {
         email: parsed.data.email,
         password: parsed.data.password,
@@ -64,7 +57,7 @@ const LoginPage = () => {
         return;
       }
 
-      router.push('/');
+      router.push(callbackUrl);
       router.refresh();
     } catch (err) {
       console.error('[LOGIN_FORM]', err);
@@ -72,7 +65,9 @@ const LoginPage = () => {
       setLoading(false);
     }
   };
- const handleGoogle = async () => {
+
+  // Google sign-in handler
+  const handleGoogle = async () => {
     setServerError('');
     await signIn('google', { callbackUrl });
   };
@@ -92,12 +87,12 @@ const LoginPage = () => {
       {/* Server error banner */}
       {serverError && (
         <div className="mb-4 p-3 rounded-lg bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-900">
-          <p className="text-sm text-red-700 dark:text-red-300">
-            {serverError}
-          </p>
+          <p className="text-sm text-red-700 dark:text-red-300">{serverError}</p>
         </div>
       )}
-   <button
+
+      {/* Google Button */}
+      <button
         type="button"
         onClick={handleGoogle}
         className="w-full flex items-center justify-center gap-3 py-2.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 font-medium hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors"
@@ -123,14 +118,12 @@ const LoginPage = () => {
           </span>
         </div>
       </div>
+
       {/* Form */}
       <form onSubmit={handleSubmit} className="space-y-4" noValidate>
         {/* Email */}
         <div>
-          <label
-            htmlFor="email"
-            className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-          >
+          <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
             Email
           </label>
           <input
@@ -143,17 +136,12 @@ const LoginPage = () => {
             autoComplete="email"
             className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
-          {errors.email && (
-            <p className="text-xs text-red-600 mt-1">{errors.email}</p>
-          )}
+          {errors.email && <p className="text-xs text-red-600 mt-1">{errors.email}</p>}
         </div>
 
         {/* Password */}
         <div>
-          <label
-            htmlFor="password"
-            className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-          >
+          <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
             Password
           </label>
           <input
@@ -166,9 +154,7 @@ const LoginPage = () => {
             autoComplete="current-password"
             className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
-          {errors.password && (
-            <p className="text-xs text-red-600 mt-1">{errors.password}</p>
-          )}
+          {errors.password && <p className="text-xs text-red-600 mt-1">{errors.password}</p>}
         </div>
 
         {/* Submit */}
@@ -181,13 +167,10 @@ const LoginPage = () => {
         </button>
       </form>
 
-      {/* Footer link to register */}
+      {/* Footer */}
       <p className="text-center text-sm text-gray-600 dark:text-gray-400 mt-6">
         Don&apos;t have an account?{' '}
-        <Link
-          href="/register"
-          className="text-indigo-600 hover:text-indigo-700 font-medium"
-        >
+        <Link href="/register" className="text-indigo-600 hover:text-indigo-700 font-medium">
           Create one
         </Link>
       </p>
