@@ -2,19 +2,15 @@
 // Sidebar - Left navigation for the dashboard
 // -------------------------------------------------------------
 //
-// STRUCTURE:
-//   1. Logo
-//   2. All Workspaces (always visible)
-//   3. Current workspace context (only when inside one)
-//      - Overview
-//      - Members
-//      - Projects
-//   4. Your workspaces (list — always visible)
-//   5. User menu (bottom)
+// DEFENSIVE PROPS:
+// We default `workspaces` to [] so that if the parent ever
+// passes undefined (hot-reload races, missing prop), the
+// .length / .map calls don't crash.
 //
-// DEFENSIVE:
-//   - workspaces defaults to [] if undefined
-//   - user defaults to {} if undefined
+// CONTEXTUAL LINKS:
+// useParams() gives us the workspace id when we're inside a
+// workspace route. Otherwise it's undefined, and contextual
+// links are hidden.
 // -------------------------------------------------------------
 
 'use client';
@@ -25,20 +21,27 @@ import { usePathname, useRouter, useParams } from 'next/navigation';
 import { signOut } from 'next-auth/react';
 
 const Sidebar = ({ user, workspaces }) => {
+  // ─── Defensive defaults ───
+  // Prevents "Cannot read properties of undefined" crashes.
   const safeUser = user || {};
   const safeWorkspaces = Array.isArray(workspaces) ? workspaces : [];
 
   const pathname = usePathname() || '';
   const router = useRouter();
   const params = useParams() || {};
-  const workspaceId = params.id; // present inside a workspace
-
+  const workspaceId = params.id; // string | undefined
+const projectId = params?.projectId; // present when on /workspaces/[id]/projects/[projectId]/...
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
-  // Find the current workspace (to show its name in the header)
-  const currentWorkspace = workspaceId
-    ? safeWorkspaces.find((w) => w.id === workspaceId)
-    : null;
+  // -----------------------------------------------------------
+  // HELPERS
+  // -----------------------------------------------------------
+  const isActive = (href) => {
+    if (href === '/workspaces') {
+      return pathname === href || pathname.startsWith(href + '/');
+    }
+    return pathname === href;
+  };
 
   const getInitials = (name) => {
     if (!name) return '?';
@@ -57,19 +60,15 @@ const Sidebar = ({ user, workspaces }) => {
   };
 
   // -----------------------------------------------------------
-  // Helper: is this href the currently-active nav item?
+  // RENDER
   // -----------------------------------------------------------
-  const isExactly = (href) => pathname === href;
-  const isAt = (href) =>
-    pathname === href || pathname.startsWith(href + '/');
-
   return (
     <aside className="w-64 flex-shrink-0 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 flex flex-col h-screen sticky top-0">
-      {/* ─── Logo ─── */}
+      {/* ----- Logo / Brand ----- */}
       <div className="px-4 py-5 border-b border-gray-200 dark:border-gray-800">
         <Link
           href="/workspaces"
-          className="flex items-center gap-2 text-base font-bold text-gray-900 dark:text-white"
+          className="flex items-center gap-2 text-lg font-bold text-gray-900 dark:text-white"
         >
           <span className="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-sm font-black">
             T
@@ -78,107 +77,144 @@ const Sidebar = ({ user, workspaces }) => {
         </Link>
       </div>
 
-      {/* ─── Main nav ─── */}
-      <nav className="flex-1 overflow-y-auto p-3 space-y-1">
-        {/* All Workspaces */}
-        <NavLink
+      {/* ----- Main nav ----- */}
+      <nav className="flex-1 overflow-y-auto p-3">
+        <Link
           href="/workspaces"
-          active={isExactly('/workspaces')}
-          icon={
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <rect x="3" y="3" width="7" height="7" rx="1.5" />
-              <rect x="14" y="3" width="7" height="7" rx="1.5" />
-              <rect x="3" y="14" width="7" height="7" rx="1.5" />
-              <rect x="14" y="14" width="7" height="7" rx="1.5" />
-            </svg>
-          }
+          className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+            pathname === '/workspaces'
+              ? 'bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300'
+              : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
+          }`}
         >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <rect x="3" y="3" width="7" height="7" rx="1.5" />
+            <rect x="14" y="3" width="7" height="7" rx="1.5" />
+            <rect x="3" y="14" width="7" height="7" rx="1.5" />
+            <rect x="14" y="14" width="7" height="7" rx="1.5" />
+          </svg>
           All Workspaces
-        </NavLink>
+        </Link>
 
-        {/* ─── Current workspace context ─── */}
-        {currentWorkspace && (
-          <>
-            <div className="pt-4 pb-2">
-              <p className="px-3 text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
-                Current
-              </p>
-            </div>
+        {/* ----- Contextual links: only when inside a workspace ----- */}
+       {/* ----- Contextual links: only when inside a workspace ----- */}
+{workspaceId && (
+  <div className="mt-4">
+    <p className="px-3 mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+      Workspace
+    </p>
 
-            <NavLink
-              href={`/workspaces/${workspaceId}`}
-              active={isExactly(`/workspaces/${workspaceId}`)}
-              icon={
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M3 12l9-9 9 9M5 10v10a1 1 0 001 1h3a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1h3a1 1 0 001-1V10" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              }
-            >
-              {currentWorkspace.name}
-            </NavLink>
+    <Link
+      href={`/workspaces/${workspaceId}`}
+      className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+        pathname === `/workspaces/${workspaceId}`
+          ? 'bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300'
+          : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
+      }`}
+    >
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M3 12l9-9 9 9M5 10v10a1 1 0 001 1h3a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1h3a1 1 0 001-1V10" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+      Overview
+    </Link>
 
-            <SubNavLink
-              href={`/workspaces/${workspaceId}/members`}
-              active={isExactly(`/workspaces/${workspaceId}/members`)}
-            >
-              Members
-            </SubNavLink>
+    <Link
+      href={`/workspaces/${workspaceId}/members`}
+      className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+        pathname === `/workspaces/${workspaceId}/members`
+          ? 'bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300'
+          : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
+      }`}
+    >
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" strokeLinecap="round" />
+        <circle cx="9" cy="7" r="4" />
+        <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" strokeLinecap="round" />
+      </svg>
+      Members
+    </Link>
 
-            <SubNavLink
-              href={`/workspaces/${workspaceId}`}
-              active={isAt(`/workspaces/${workspaceId}/projects`)}
-              disabled
-            >
-              Projects (view on workspace)
-            </SubNavLink>
-          </>
-        )}
+    {/* Show "Current project" shortcut when inside a project route */}
+    {projectId && (
+      <>
+        <p className="px-3 mt-4 mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+          Current project
+        </p>
+        <Link
+          href={`/workspaces/${workspaceId}/projects/${projectId}`}
+          className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+            pathname === `/workspaces/${workspaceId}/projects/${projectId}`
+              ? 'bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300'
+              : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
+          }`}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          Overview
+        </Link>
+        <Link
+          href={`/workspaces/${workspaceId}/projects/${projectId}/settings`}
+          className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+            pathname === `/workspaces/${workspaceId}/projects/${projectId}/settings`
+              ? 'bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300'
+              : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
+          }`}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 008 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H2a2 2 0 110-4h.09A1.65 1.65 0 004 8a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V2a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9c0 .69.41 1.29 1 1.51H21a2 2 0 110 4h-.09c-.59.22-1 .82-1 1.51z" />
+          </svg>
+          Settings
+        </Link>
+      </>
+    )}
+  </div>
+)}
 
-        {/* ─── Divider before workspace list ─── */}
+        {/* ----- Workspace list ----- */}
         {safeWorkspaces.length > 0 && (
-          <div className="pt-4 pb-2">
-            <p className="px-3 text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
+          <div className="mt-6">
+            <p className="px-3 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">
               Your workspaces
             </p>
+            <ul className="space-y-0.5">
+              {safeWorkspaces.slice(0, 8).map((ws) => {
+                const isInsideThis =
+                  typeof ws?.id === 'string' &&
+                  pathname.startsWith(`/workspaces/${ws.id}`);
+
+                return (
+                  <li key={ws.id}>
+                    <Link
+                      href={`/workspaces/${ws.id}`}
+                      className={`flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors ${
+                        isInsideThis
+                          ? 'bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300'
+                          : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
+                      }`}
+                    >
+                      <span className="truncate">{ws.name}</span>
+                      {ws.role === 'OWNER' && (
+                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 flex-shrink-0 ml-2">
+                          OWNER
+                        </span>
+                      )}
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+            {safeWorkspaces.length > 8 && (
+              <p className="px-3 py-1 text-xs text-gray-500 dark:text-gray-400">
+                + {safeWorkspaces.length - 8} more
+              </p>
+            )}
           </div>
-        )}
-
-        {/* ─── Workspace list (compact) ─── */}
-        {safeWorkspaces.slice(0, 6).map((ws) => {
-          const isCurrent = ws.id === workspaceId;
-          return (
-            <Link
-              key={ws.id}
-              href={`/workspaces/${ws.id}`}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
-                isCurrent
-                  ? 'bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-medium'
-                  : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
-              }`}
-            >
-              <span
-                className={`w-6 h-6 rounded-md flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0 ${
-                  isCurrent ? 'bg-indigo-600' : 'bg-gray-400 dark:bg-gray-600'
-                }`}
-              >
-                {ws.name.slice(0, 2).toUpperCase()}
-              </span>
-              <span className="truncate">{ws.name}</span>
-            </Link>
-          );
-        })}
-
-        {safeWorkspaces.length > 6 && (
-          <Link
-            href="/workspaces"
-            className="block px-3 py-1 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
-          >
-            + {safeWorkspaces.length - 6} more
-          </Link>
         )}
       </nav>
 
-      {/* ─── User menu ─── */}
+      {/* ----- User menu (bottom) ----- */}
       <div className="border-t border-gray-200 dark:border-gray-800 p-3 relative">
         <button
           type="button"
@@ -210,6 +246,7 @@ const Sidebar = ({ user, workspaces }) => {
           </svg>
         </button>
 
+        {/* Dropdown */}
         {userMenuOpen && (
           <>
             <div
@@ -235,45 +272,6 @@ const Sidebar = ({ user, workspaces }) => {
         )}
       </div>
     </aside>
-  );
-};
-
-// =============================================================
-// NavLink - main navigation item (bold, larger)
-// =============================================================
-const NavLink = ({ href, active, icon, children }) => (
-  <Link
-    href={href}
-    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-      active
-        ? 'bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300'
-        : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
-    }`}
-  >
-    <span className="flex-shrink-0">{icon}</span>
-    <span className="truncate">{children}</span>
-  </Link>
-);
-
-// =============================================================
-// SubNavLink - nested navigation item (indented, lighter)
-// =============================================================
-const SubNavLink = ({ href, active, children, disabled }) => {
-  const base = `flex items-center gap-2 pl-10 pr-3 py-1.5 rounded-lg text-sm transition-colors`;
-  const styles = active
-    ? 'text-indigo-700 dark:text-indigo-300 font-medium'
-    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white';
-
-  if (disabled) {
-    return (
-      <span className={`${base} ${styles} cursor-default`}>{children}</span>
-    );
-  }
-
-  return (
-    <Link href={href} className={`${base} ${styles}`}>
-      {children}
-    </Link>
   );
 };
 
