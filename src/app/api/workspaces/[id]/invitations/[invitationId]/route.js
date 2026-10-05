@@ -2,12 +2,19 @@
 // /api/workspaces/[id]/invitations/[invitationId]
 // -------------------------------------------------------------
 //
-// DELETE: Revoke a pending invitation.
-// Auth: owner or manager of the workspace.
+// DELETE: Revoke a PENDING invitation.
 //
-// Moved from /api/invitations/[id] because Next.js forbids two
-// different dynamic names at the same path level
-// ([id] and [token] under /api/invitations/).
+// AUTHORIZATION:
+//   Owner or manager of the workspace.
+//
+// BEHAVIOR:
+//   Sets status = 'REVOKED' (soft delete). We keep the row
+//   for audit purposes, but the token can no longer be used.
+//
+// GUARDS:
+//   - Invitation must exist and belong to this workspace
+//   - Invitation must be PENDING (can't revoke accepted ones)
+//   - Caller must be owner/manager
 // -------------------------------------------------------------
 
 import { NextResponse } from 'next/server';
@@ -19,6 +26,7 @@ import { getMemberRole, canInviteMembers } from '@/lib/permissions';
 
 export async function DELETE(request, { params }) {
   try {
+    // ─── Step 1: Auth ───
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -26,7 +34,7 @@ export async function DELETE(request, { params }) {
 
     const { id: workspaceId, invitationId } = await params;
 
-    // Verify the invitation belongs to this workspace
+    // ─── Step 2: Fetch the invitation and verify it belongs here ───
     const invitation = await prisma.invitation.findUnique({
       where: { id: invitationId },
       select: { id: true, workspaceId: true, status: true },
@@ -39,7 +47,7 @@ export async function DELETE(request, { params }) {
       );
     }
 
-    // Role check
+    // ─── Step 3: Role check (owner or manager) ───
     const role = await getMemberRole(session.user.id, workspaceId);
     if (!canInviteMembers(role)) {
       return NextResponse.json(
@@ -48,6 +56,7 @@ export async function DELETE(request, { params }) {
       );
     }
 
+    // ─── Step 4: Only PENDING can be revoked ───
     if (invitation.status !== 'PENDING') {
       return NextResponse.json(
         { error: 'Only pending invitations can be revoked' },
@@ -55,6 +64,7 @@ export async function DELETE(request, { params }) {
       );
     }
 
+    // ─── Step 5: Soft delete ───
     await prisma.invitation.update({
       where: { id: invitationId },
       data: { status: 'REVOKED' },
@@ -62,7 +72,7 @@ export async function DELETE(request, { params }) {
 
     return NextResponse.json({ message: 'Invitation revoked' });
   } catch (error) {
-    console.error('[INVITATION_DELETE_ERROR]', error);
+    console.error('[INVITATION_REVOKE_ERROR]', error);
     return NextResponse.json(
       { error: 'Failed to revoke invitation' },
       { status: 500 }

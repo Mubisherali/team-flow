@@ -6,9 +6,9 @@
 //
 // SERVER COMPONENT:
 //   - Fetches workspace + user role + stats server-side
-//   - Renders header, stats, and placeholders
+//   - Renders header, stats, projects placeholder, team section
 //
-// AUTH: 
+// AUTH:
 //   - If not a member → 404 (don't leak existence)
 //   - If a member → render page
 // -------------------------------------------------------------
@@ -28,21 +28,16 @@ export default async function WorkspaceDetailPage({ params }) {
     redirect('/login');
   }
 
-  // ─── Step 2: Get workspace id from URL ───
-  // In Next.js 16, params is a Promise.
+  // ─── Step 2: Get workspace id ───
   const { id } = await params;
 
-  // ─── Step 3: Verify membership BEFORE fetching details ───
-  // This is faster: we check the join row first. If the user
-  // isn't a member, we 404 without hitting the workspace query.
+  // ─── Step 3: Verify membership ───
   const role = await getMemberRole(session.user.id, id);
-
   if (!canViewWorkspace(role)) {
-    // 404 (not 403) — don't reveal that this workspace exists.
     notFound();
   }
 
-  // ─── Step 4: Fetch the workspace + stats ───
+  // ─── Step 4: Fetch workspace + stats ───
   const workspace = await prisma.workspace.findUnique({
     where: { id },
     include: {
@@ -55,14 +50,11 @@ export default async function WorkspaceDetailPage({ params }) {
     },
   });
 
-  // Defensive: member row exists but workspace missing (shouldn't happen).
   if (!workspace) {
     notFound();
   }
 
-  // ─── Step 5: Count tasks across all projects in this workspace ───
-  // Tasks belong to projects. We count them via the relation:
-  //   task.project.workspaceId = id
+  // ─── Step 5: Count tasks ───
   const taskCount = await prisma.task.count({
     where: {
       project: { workspaceId: id },
@@ -77,7 +69,6 @@ export default async function WorkspaceDetailPage({ params }) {
       {/* ----- Header ----- */}
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-8">
         <div className="flex items-start gap-4">
-          {/* Gradient avatar */}
           <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-lg flex-shrink-0">
             {workspace.name.slice(0, 2).toUpperCase()}
           </div>
@@ -100,7 +91,6 @@ export default async function WorkspaceDetailPage({ params }) {
           </div>
         </div>
 
-        {/* Settings button (owner only) */}
         {canEdit && (
           <Link
             href={`/workspaces/${id}/settings`}
@@ -166,20 +156,44 @@ export default async function WorkspaceDetailPage({ params }) {
         </div>
       </section>
 
-      {/* ----- Members placeholder (Phase 4) ----- */}
+      {/* ----- Team section ----- */}
       <section>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
             Team
           </h2>
-          <span className="text-xs text-gray-500 dark:text-gray-400 px-2 py-1 rounded bg-gray-100 dark:bg-gray-800">
-            Invitations coming in Phase 4
-          </span>
+          <Link
+            href={`/workspaces/${id}/members`}
+            className="text-sm text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 font-medium transition-colors"
+          >
+            View all →
+          </Link>
         </div>
-        <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-6 text-center">
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            Invite your team to collaborate in this workspace.
-          </p>
+
+        <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-6">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                <strong className="text-gray-900 dark:text-white">
+                  {workspace._count.members}
+                </strong>{' '}
+                {workspace._count.members === 1 ? 'member' : 'members'} in this workspace
+              </p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                Invite teammates to collaborate on projects and tasks.
+              </p>
+            </div>
+
+            <Link
+              href={`/workspaces/${id}/members`}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium transition-colors"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M12 5v14M5 12h14" strokeLinecap="round" />
+              </svg>
+              Manage team
+            </Link>
+          </div>
         </div>
       </section>
     </div>
@@ -187,7 +201,7 @@ export default async function WorkspaceDetailPage({ params }) {
 }
 
 // =============================================================
-// StatCard - Reusable stat display
+// StatCard
 // =============================================================
 const StatCard = ({ label, value, icon }) => (
   <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-5">
@@ -206,7 +220,7 @@ const StatCard = ({ label, value, icon }) => (
 );
 
 // =============================================================
-// RoleBadge - OWNER / MANAGER / MEMBER
+// RoleBadge
 // =============================================================
 const RoleBadge = ({ role }) => {
   const styles = {
@@ -222,7 +236,7 @@ const RoleBadge = ({ role }) => {
 };
 
 // =============================================================
-// PlaceholderCard - Empty dashed card for future features
+// PlaceholderCard
 // =============================================================
 const PlaceholderCard = ({ text }) => (
   <div className="rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-800 p-6 min-h-[120px] flex items-center justify-center">

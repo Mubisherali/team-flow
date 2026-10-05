@@ -1,20 +1,18 @@
 // -------------------------------------------------------------
-// /api/workspaces/[id]/members/[userId] - Manage a Member
+// /api/workspaces/[id]/members/[userId]
 // -------------------------------------------------------------
 //
 // PATCH  : Change a member's role (MEMBER <-> MANAGER)
 // DELETE : Remove a member from the workspace
 //
-// AUTH RULES:
+// AUTHORIZATION:
 //   PATCH  - Only the OWNER can change roles
 //   DELETE - OWNER or MANAGER can remove members
-//          (but not the OWNER themselves)
 //
-// GUARDS:
-//   - Can't change own role
-//   - Can't remove yourself
-//   - Can't remove the owner
-//   - Can't demote the owner (owner stays owner)
+// GUARDS (in both endpoints):
+//   - Cannot target yourself
+//   - Cannot modify/remove the OWNER
+//   - MANAGERs cannot remove other MANAGERs (only OWNER can)
 // -------------------------------------------------------------
 
 import { NextResponse } from 'next/server';
@@ -30,10 +28,11 @@ import {
 import { updateMemberRoleSchema } from '@/lib/validators/member';
 
 // =============================================================
-// PATCH - Change role
+// PATCH — Change member's role
 // =============================================================
 export async function PATCH(request, { params }) {
   try {
+    // ─── Step 1: Auth ───
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -41,7 +40,7 @@ export async function PATCH(request, { params }) {
 
     const { id: workspaceId, userId: targetUserId } = await params;
 
-    // Role check — only OWNER can change roles
+    // ─── Step 2: Actor must be OWNER ───
     const actorRole = await getMemberRole(session.user.id, workspaceId);
     if (!canChangeRoles(actorRole)) {
       return NextResponse.json(
@@ -50,7 +49,7 @@ export async function PATCH(request, { params }) {
       );
     }
 
-    // Can't change your own role
+    // ─── Step 3: Can't change your own role ───
     if (targetUserId === session.user.id) {
       return NextResponse.json(
         { error: 'You cannot change your own role' },
@@ -58,7 +57,7 @@ export async function PATCH(request, { params }) {
       );
     }
 
-    // Validate body
+    // ─── Step 4: Validate body ───
     const body = await request.json();
     const parsed = updateMemberRoleSchema.safeParse(body);
     if (!parsed.success) {
@@ -68,7 +67,7 @@ export async function PATCH(request, { params }) {
       );
     }
 
-    // Find target membership
+    // ─── Step 5: Target membership must exist ───
     const membership = await prisma.workspaceMember.findUnique({
       where: {
         workspaceId_userId: { workspaceId, userId: targetUserId },
@@ -82,7 +81,7 @@ export async function PATCH(request, { params }) {
       );
     }
 
-    // Can't demote the owner
+    // ─── Step 6: Owner's role cannot be changed ───
     if (membership.role === 'OWNER') {
       return NextResponse.json(
         { error: 'The owner role cannot be changed' },
@@ -90,7 +89,7 @@ export async function PATCH(request, { params }) {
       );
     }
 
-    // Update
+    // ─── Step 7: Update role ───
     const updated = await prisma.workspaceMember.update({
       where: { id: membership.id },
       data: { role: parsed.data.role },
@@ -123,10 +122,11 @@ export async function PATCH(request, { params }) {
 }
 
 // =============================================================
-// DELETE - Remove member
+// DELETE — Remove member from workspace
 // =============================================================
 export async function DELETE(request, { params }) {
   try {
+    // ─── Step 1: Auth ───
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -134,6 +134,7 @@ export async function DELETE(request, { params }) {
 
     const { id: workspaceId, userId: targetUserId } = await params;
 
+    // ─── Step 2: Actor must be OWNER or MANAGER ───
     const actorRole = await getMemberRole(session.user.id, workspaceId);
     if (!canRemoveMembers(actorRole)) {
       return NextResponse.json(
@@ -142,7 +143,7 @@ export async function DELETE(request, { params }) {
       );
     }
 
-    // Can't remove yourself (must use "leave workspace" — future feature)
+    // ─── Step 3: Can't remove yourself (future: "leave workspace") ───
     if (targetUserId === session.user.id) {
       return NextResponse.json(
         { error: 'You cannot remove yourself from the workspace' },
@@ -150,6 +151,7 @@ export async function DELETE(request, { params }) {
       );
     }
 
+    // ─── Step 4: Target membership must exist ───
     const membership = await prisma.workspaceMember.findUnique({
       where: {
         workspaceId_userId: { workspaceId, userId: targetUserId },
@@ -163,7 +165,7 @@ export async function DELETE(request, { params }) {
       );
     }
 
-    // Can't remove the owner
+    // ─── Step 5: Can't remove the OWNER ───
     if (membership.role === 'OWNER') {
       return NextResponse.json(
         { error: 'The workspace owner cannot be removed' },
@@ -171,7 +173,7 @@ export async function DELETE(request, { params }) {
       );
     }
 
-    // Managers can't remove other managers — only the owner can.
+    // ─── Step 6: MANAGERs can't remove other MANAGERs ───
     if (actorRole === 'MANAGER' && membership.role === 'MANAGER') {
       return NextResponse.json(
         { error: 'Managers cannot remove other managers' },
@@ -179,8 +181,9 @@ export async function DELETE(request, { params }) {
       );
     }
 
-    // Also remove from any projects in this workspace
-    // (so they don't linger as project members of a workspace they left)
+    // ─── Step 7: Transaction — remove member + their project memberships ───
+    // We also clean up their ProjectMember rows in this workspace so
+    // they don't linger as a project member after leaving the workspace.
     await prisma.$transaction([
       prisma.projectMember.deleteMany({
         where: {
