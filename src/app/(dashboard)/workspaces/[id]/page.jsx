@@ -6,11 +6,12 @@
 //
 // SERVER COMPONENT:
 //   - Fetches workspace + user role + stats server-side
-//   - Renders header, stats, projects placeholder, team section
+//   - Fetches visible projects for the current user
+//   - Renders header, stats, projects grid, team section
 //
-// AUTH:
-//   - If not a member → 404 (don't leak existence)
-//   - If a member → render page
+// PROJECT VISIBILITY:
+//   - OWNER/MANAGER → see ALL projects in the workspace
+//   - MEMBER        → see only projects they belong to
 // -------------------------------------------------------------
 
 import { notFound, redirect } from 'next/navigation';
@@ -19,7 +20,14 @@ import { getServerSession } from 'next-auth';
 
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { getMemberRole, canViewWorkspace, canEditWorkspace } from '@/lib/permissions';
+import {
+  getMemberRole,
+  canViewWorkspace,
+  canEditWorkspace,
+  canCreateProjects,
+} from '@/lib/permissions';
+import ProjectsSection from '@/components/project/ProjectsSection';
+import { DEFAULT_PROJECT_COLOR } from '@/lib/project-colors';
 
 export default async function WorkspaceDetailPage({ params }) {
   // ─── Step 1: Auth check ───
@@ -28,16 +36,15 @@ export default async function WorkspaceDetailPage({ params }) {
     redirect('/login');
   }
 
-  // ─── Step 2: Get workspace id ───
   const { id } = await params;
 
-  // ─── Step 3: Verify membership ───
+  // ─── Step 2: Verify membership ───
   const role = await getMemberRole(session.user.id, id);
   if (!canViewWorkspace(role)) {
     notFound();
   }
 
-  // ─── Step 4: Fetch workspace + stats ───
+  // ─── Step 3: Fetch workspace + counts ───
   const workspace = await prisma.workspace.findUnique({
     where: { id },
     include: {
@@ -54,16 +61,56 @@ export default async function WorkspaceDetailPage({ params }) {
     notFound();
   }
 
-  // ─── Step 5: Count tasks ───
+  // ─── Step 4: Count tasks across all projects ───
   const taskCount = await prisma.task.count({
     where: {
       project: { workspaceId: id },
     },
   });
 
-  // ─── Step 6: Render ───
-  const canEdit = canEditWorkspace(role);
+  // ─── Step 5: Fetch visible projects ───
+  // Same filter as GET /api/workspaces/[id]/projects
+  const isPrivileged = role === 'OWNER' || role === 'MANAGER';
 
+  const projectWhere = isPrivileged
+    ? { workspaceId: id }
+    : {
+        workspaceId: id,
+        members: { some: { userId: session.user.id } },
+      };
+
+  const projects = await prisma.project.findMany({
+    where: projectWhere,
+    include: {
+      _count: {
+        select: { members: true, tasks: true },
+      },
+      members: {
+        where: { userId: session.user.id },
+        select: { id: true },
+      },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  // Shape for the client (serialize dates → strings)
+  const shapedProjects = projects.map((p) => ({
+    id: p.id,
+    name: p.name,
+    description: p.description,
+    color: p.color || DEFAULT_PROJECT_COLOR,
+    memberCount: p._count.members,
+    taskCount: p._count.tasks,
+    isMember: p.members.length > 0,
+    createdAt: p.createdAt.toISOString(),
+    updatedAt: p.updatedAt.toISOString(),
+  }));
+
+  // ─── Step 6: Permissions ───
+  const canEdit = canEditWorkspace(role);
+  const canCreate = canCreateProjects(role);
+
+  // ─── Step 7: Render ───
   return (
     <div className="p-8 max-w-6xl mx-auto">
       {/* ----- Header ----- */}
@@ -139,21 +186,13 @@ export default async function WorkspaceDetailPage({ params }) {
         />
       </div>
 
-      {/* ----- Projects placeholder (Phase 5) ----- */}
+      {/* ----- Projects ----- */}
       <section className="mb-8">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-            Projects
-          </h2>
-          <span className="text-xs text-gray-500 dark:text-gray-400 px-2 py-1 rounded bg-gray-100 dark:bg-gray-800">
-            Coming in Phase 5
-          </span>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <PlaceholderCard text="Projects will appear here" />
-          <PlaceholderCard text="Create one from this page soon" />
-          <PlaceholderCard text="Assign tasks, add members" />
-        </div>
+        <ProjectsSection
+          workspaceId={id}
+          initialProjects={shapedProjects}
+          canCreate={canCreate}
+        />
       </section>
 
       {/* ----- Team section ----- */}
@@ -234,12 +273,3 @@ const RoleBadge = ({ role }) => {
     </span>
   );
 };
-
-// =============================================================
-// PlaceholderCard
-// =============================================================
-const PlaceholderCard = ({ text }) => (
-  <div className="rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-800 p-6 min-h-[120px] flex items-center justify-center">
-    <p className="text-xs text-gray-400 dark:text-gray-600 text-center">{text}</p>
-  </div>
-);

@@ -50,7 +50,7 @@ export function isMember(role) {
 
 // -------------------------------------------------------------
 // ACTION PREDICATES
-// -------------------------------------------------------------
+// -----------------------------------------------------------ca--
 // Named after what the user wants to DO, not what role they
 // have. This makes calling code read like English:
 //   if (canDeleteWorkspace(role)) { ... }
@@ -100,6 +100,19 @@ export function canCreateProjects(role) {
 }
 
 export function canDeleteProjects(role) {
+  return isManagerOrOwner(role);
+}
+// -------------------------------------------------------------
+// Aliases to match single-project route naming.
+export function canEditProject(role) {
+  return isManagerOrOwner(role);
+}
+
+export function canDeleteProject(role) {
+  return isManagerOrOwner(role);
+}
+
+export function canManageProjectMembers(role) {
   return isManagerOrOwner(role);
 }
 
