@@ -129,3 +129,105 @@ export function canUpdateAnyTask(role) {
   // (that rule is enforced in the task route).
   return isManagerOrOwner(role);
 }
+
+
+
+// -------------------------------------------------------------
+// TASK PERMISSIONS
+// -------------------------------------------------------------
+
+// --- Role-based (workspace role) ---
+
+// Can this role view tasks at all? (Workspace-level gate.)
+export function canViewTasks(role) {
+  return isMember(role); // any workspace member passes this gate
+}
+
+// Can this role create tasks? (Owner, manager, or any project
+// member — project membership is verified separately.)
+export function canCreateTask(role) {
+  return isMember(role);
+}
+
+// Can this role edit ANY task in the project?
+// Only owners and managers have blanket edit rights.
+export function canEditAnyTask(role) {
+  return isManagerOrOwner(role);
+}
+
+// Can this role delete ANY task in the project?
+export function canDeleteAnyTask(role) {
+  return isManagerOrOwner(role);
+}
+
+// Is this role "privileged" for tasks — i.e. bypasses the
+// own-task restriction? (Just a clearer alias.)
+export function isTaskPrivileged(role) {
+  return isManagerOrOwner(role);
+}
+
+// --- Context-aware (needs the task) ---
+
+// Can the user mutate (edit / delete) this specific task?
+// Returns true if:
+//   - Role is owner/manager, OR
+//   - User is the task's assignee, OR
+//   - User created the task
+//
+// Pure function. Doesn't check project access — the caller
+// must have already established that.
+export function canMutateTask({ role, task, userId }) {
+  if (!task || !userId) return false;
+  if (isTaskPrivileged(role)) return true;
+  if (task.assigneeId === userId) return true;
+  if (task.createdById === userId) return true;
+  return false;
+}
+
+// -------------------------------------------------------------
+// ASSIGNMENT PERMISSIONS
+// -------------------------------------------------------------
+// Whether `userId` (with `role`) is allowed to set a task's
+// assignee to `targetUserId`.
+//
+// RULES:
+//   - targetUserId is null/empty  → allowed (unassign)
+//   - targetUserId === userId     → allowed (self)
+//   - owner/manager               → allowed (any target)
+//   - plain member                → NOT allowed (others)
+export function canAssignTo({ role, userId, targetUserId }) {
+  if (!targetUserId) return true;              // unassign
+  if (targetUserId === userId) return true;    // assign to self
+  return isManagerOrOwner(role);               // only privileged can assign to others
+}
+
+
+// -------------------------------------------------------------
+// KANBAN WORKFLOW PERMISSIONS
+// -------------------------------------------------------------
+// Whether `userId` (with `role`) can move `task` to `newStatus`.
+//
+// RULES:
+//   - OWNER/MANAGER        → can move any task anywhere
+//   - ASSIGNEE/CREATOR     → can move own tasks, but NOT to DONE
+//   - Everyone else        → cannot move
+//
+// WHY MEMBERS CAN'T MOVE TO DONE:
+//   DONE means "verified by a manager". Members push to REVIEW
+//   to request approval; only managers/owners complete the loop.
+export function canMoveTaskTo({ role, userId, task, newStatus }) {
+  if (!task || !userId || !newStatus) return false;
+
+  // Privileged: any move.
+  if (isManagerOrOwner(role)) return true;
+
+  // Members only move their own tasks.
+  const isMyTask =
+    task.assigneeId === userId || task.createdById === userId;
+  if (!isMyTask) return false;
+
+  // Members can never push their own task into DONE.
+  if (newStatus === 'DONE') return false;
+
+  return true;
+}

@@ -4,15 +4,13 @@
 //
 // SERVER COMPONENT:
 //   - Auth check
-//   - Verify the user can see this project:
-//       * OWNER/MANAGER of the workspace → always
-//       * MEMBER of the workspace       → only if project member
-//   - Fetch project + counts + members + all workspace members
-//   - Render header, stats, placeholder for tasks, members section
+//   - Verify project visibility (owner/manager OR project member)
+//   - Fetch project + tasks + project members + workspace members
+//   - Render header, stats, Kanban, members section
 //
-// AUTH:
-//   - Not a workspace member OR not a project member (for regular users)
-//     → 404 (don't leak existence)
+// PROJECT VISIBILITY:
+//   - OWNER/MANAGER of the workspace  → always
+//   - MEMBER of the workspace         → only if project member
 // -------------------------------------------------------------
 
 import { notFound, redirect } from 'next/navigation';
@@ -27,9 +25,11 @@ import {
   canManageProjectMembers,
 } from '@/lib/permissions';
 import ManageMembersButton from '@/components/project/ManageMembersButton';
+import ProjectTasksSection from '@/components/task/ProjectTasksSection';
+import { DEFAULT_PROJECT_COLOR } from '@/lib/project-colors';
 
 export default async function ProjectDetailPage({ params }) {
-  // ─── Step 1: Auth ───
+  // ─── Auth ───
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
     redirect('/login');
@@ -37,13 +37,13 @@ export default async function ProjectDetailPage({ params }) {
 
   const { id: workspaceId, projectId } = await params;
 
-  // ─── Step 2: Workspace membership check ───
+  // ─── Workspace membership check ───
   const role = await getMemberRole(session.user.id, workspaceId);
   if (!canViewWorkspace(role)) {
     notFound();
   }
 
-  // ─── Step 3: Fetch project + verify it belongs to this workspace ───
+  // ─── Fetch project + verify it belongs to this workspace ───
   const project = await prisma.project.findUnique({
     where: { id: projectId },
     include: {
@@ -58,26 +58,36 @@ export default async function ProjectDetailPage({ params }) {
     notFound();
   }
 
-  // ─── Step 4: Regular members can only see projects they belong to ───
+  // ─── Regular members can only see projects they belong to ───
   const isPrivileged = role === 'OWNER' || role === 'MANAGER';
 
   if (!isPrivileged) {
     const isProjectMember = await prisma.projectMember.findUnique({
       where: {
-        projectId_userId: {
-          projectId,
-          userId: session.user.id,
-        },
+        projectId_userId: { projectId, userId: session.user.id },
       },
     });
-
     if (!isProjectMember) {
       notFound();
     }
   }
 
-  // ─── Step 5: Fetch project members + all workspace members ───
-  const [projectMembers, workspaceMembers] = await Promise.all([
+  // ─── Fetch tasks + project members + workspace members in parallel ───
+  const [tasks, projectMembers, workspaceMembers] = await Promise.all([
+    prisma.task.findMany({
+      where: { projectId },
+      include: {
+        assignee: {
+          select: { id: true, name: true, email: true, avatarUrl: true },
+        },
+        createdBy: {
+          select: { id: true, name: true, email: true, avatarUrl: true },
+        },
+        _count: { select: { comments: true } },
+      },
+      orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
+    }),
+
     prisma.projectMember.findMany({
       where: { projectId },
       include: {
@@ -87,6 +97,7 @@ export default async function ProjectDetailPage({ params }) {
       },
       orderBy: { addedAt: 'asc' },
     }),
+
     prisma.workspaceMember.findMany({
       where: { workspaceId },
       include: {
@@ -98,7 +109,39 @@ export default async function ProjectDetailPage({ params }) {
     }),
   ]);
 
-  // ─── Step 6: Shape for the client ───
+  // ─── Shape for the client ───
+  // Dates → ISO strings (serializable). Flatten nested user objects.
+  const shapedTasks = tasks.map((t) => ({
+    id: t.id,
+    projectId: t.projectId,
+    title: t.title,
+    description: t.description,
+    status: t.status,
+    priority: t.priority,
+    labels: t.labels,
+    dueDate: t.dueDate ? t.dueDate.toISOString() : null,
+    assigneeId: t.assigneeId,
+    assignee: t.assignee
+      ? {
+          id: t.assignee.id,
+          name: t.assignee.name,
+          email: t.assignee.email,
+          avatarUrl: t.assignee.avatarUrl,
+        }
+      : null,
+    createdById: t.createdById,
+    createdBy: {
+      id: t.createdBy.id,
+      name: t.createdBy.name,
+      email: t.createdBy.email,
+      avatarUrl: t.createdBy.avatarUrl,
+    },
+    commentCount: t._count.comments,
+    order: t.order,
+    createdAt: t.createdAt.toISOString(),
+    updatedAt: t.updatedAt.toISOString(),
+  }));
+
   const shapedProjectMembers = projectMembers.map((m) => ({
     id: m.id,
     userId: m.user.id,
@@ -116,15 +159,14 @@ export default async function ProjectDetailPage({ params }) {
     role: m.role,
   }));
 
-  // ─── Step 7: Determine permissions for the UI ───
+  // ─── Render ───
   const canManage = canManageProjectMembers(role);
-  const projectColor = project.color || '#6366f1';
+  const projectColor = project.color || DEFAULT_PROJECT_COLOR;
   const initials = project.name.trim().slice(0, 2).toUpperCase();
 
-  // ─── Step 8: Render ───
   return (
     <div className="p-8 max-w-6xl mx-auto">
-      {/* Breadcrumb / back link */}
+      {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 mb-6">
         <Link
           href={`/workspaces/${workspaceId}`}
@@ -248,27 +290,18 @@ export default async function ProjectDetailPage({ params }) {
         />
       </div>
 
-      {/* Tasks placeholder (Phase 6) */}
-      <section className="mb-8">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-            Tasks
-          </h2>
-          <span className="text-xs text-gray-500 dark:text-gray-400 px-2 py-1 rounded bg-gray-100 dark:bg-gray-800">
-            Kanban board coming in Phase 6
-          </span>
-        </div>
-        <div className="rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-800 p-8 text-center">
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            This is where the Kanban board will live.
-          </p>
-          <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
-            TODO → IN PROGRESS → REVIEW → DONE
-          </p>
-        </div>
+      {/* ─── Kanban Board ─── */}
+      <section className="mb-10">
+        <ProjectTasksSection
+          projectId={projectId}
+          initialTasks={shapedTasks}
+          projectMembers={shapedProjectMembers}
+          currentUserId={session.user.id}
+          workspaceRole={role}
+        />
       </section>
 
-      {/* Members section */}
+      {/* ─── Members Section ─── */}
       <section>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
@@ -289,7 +322,6 @@ export default async function ProjectDetailPage({ params }) {
           )}
         </div>
 
-        {/* Member avatars row */}
         {shapedProjectMembers.length > 0 ? (
           <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-5">
             <div className="flex items-center gap-3 flex-wrap">
@@ -330,7 +362,7 @@ const StatCard = ({ label, value, icon }) => (
 );
 
 // =============================================================
-// MemberChip - avatar + name row for the members section
+// MemberChip
 // =============================================================
 const MemberChip = ({ member }) => {
   const initials = (member.name || member.email || '?')
