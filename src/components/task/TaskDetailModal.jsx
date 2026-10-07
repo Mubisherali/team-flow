@@ -14,19 +14,19 @@
 //   onUpdated       : (task) => void
 //   onDeleted       : (taskId) => void
 //
-// WORKFLOW:
-//   The status dropdown only lists statuses this user can move
-//   to. Members won't see DONE. If they can't move at all,
-//   status is locked with an explanatory tooltip.
-//
-// AUTO-SAVE:
-//   Text fields save on blur. Selects save immediately on change.
-//   A small "Saving..." / "Saved" indicator shows in the header.
+// SECTIONS:
+//   1. Title
+//   2. Description
+//   3. Status / Priority
+//   4. Assignee (rich dropdown) / Due date
+//   5. Labels
+//   6. Meta footer
+//   7. Comments (CommentList — fetches its own data)
 // -------------------------------------------------------------
 
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { updateTaskSchema } from '@/lib/validators/task';
@@ -38,6 +38,7 @@ import {
   toDateTimeLocal,
   fromDateTimeLocal,
 } from '@/lib/task-constants';
+import CommentList from './CommentList';
 
 const TaskDetailModal = ({
   isOpen,
@@ -114,10 +115,9 @@ const TaskDetailModal = ({
   // -----------------------------------------------------------
   // WORKFLOW: which statuses can this user move to?
   // -----------------------------------------------------------
-  // Mirrors canMoveTaskTo on the server.
   const canMoveToStatus = (targetStatus) => {
     if (!task) return false;
-    if (targetStatus === task.status) return true; // current status always shown
+    if (targetStatus === task.status) return true;
     if (!canEdit) return false;
     if (isPrivileged) return true;
 
@@ -129,13 +129,16 @@ const TaskDetailModal = ({
     return true;
   };
 
-  // Statuses visible in the dropdown
   const availableStatuses = TASK_STATUSES.filter((s) =>
     canMoveToStatus(s.value)
   );
-
-  // Can this user move the task at all?
   const canMoveStatus = availableStatuses.length > 1;
+
+  // Assignees the current user is allowed to pick from
+  const assignableMembers = useMemo(() => {
+    if (isPrivileged) return projectMembers;
+    return projectMembers.filter((m) => m.userId === currentUserId);
+  }, [isPrivileged, projectMembers, currentUserId]);
 
   // -----------------------------------------------------------
   // PATCH HELPER
@@ -292,7 +295,7 @@ const TaskDetailModal = ({
         className="w-full max-w-2xl bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-800 max-h-[90vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
+        {/* ─── Header ─── */}
         <div className="flex items-center justify-between p-5 border-b border-gray-200 dark:border-gray-800">
           <div className="flex items-center gap-2">
             <span className={`w-2 h-2 rounded-full ${statusInfo.dot}`} />
@@ -346,7 +349,7 @@ const TaskDetailModal = ({
           </div>
         </div>
 
-        {/* Body */}
+        {/* ─── Body ─── */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
           {saveError && (
             <div className="p-3 rounded-lg bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-900">
@@ -405,9 +408,7 @@ const TaskDetailModal = ({
                 }
                 className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-70 disabled:cursor-not-allowed"
               >
-                {/* Current status always shown */}
                 <option value={status}>{currentStatusMeta?.label || status}</option>
-                {/* Other statuses the user can move to */}
                 {availableStatuses
                   .filter((s) => s.value !== status)
                   .map((s) => (
@@ -416,12 +417,14 @@ const TaskDetailModal = ({
                     </option>
                   ))}
               </select>
-              {/* Hint for non-privileged users moving to REVIEW */}
-              {!isPrivileged && status !== 'DONE' && canMoveToStatus('REVIEW') && status !== 'REVIEW' && (
-                <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">
-                  Move to Review to request approval before Done.
-                </p>
-              )}
+              {!isPrivileged &&
+                status !== 'DONE' &&
+                canMoveToStatus('REVIEW') &&
+                status !== 'REVIEW' && (
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">
+                    Move to Review to request approval before Done.
+                  </p>
+                )}
               {!isPrivileged && status === 'REVIEW' && (
                 <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1">
                   Awaiting manager approval.
@@ -448,28 +451,19 @@ const TaskDetailModal = ({
             </div>
           </div>
 
-          {/* Assignee + Due date */}
+          {/* Assignee (rich) + Due date */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1.5">
                 Assignee
               </label>
-              <select
+              <AssigneeSelect
                 value={assigneeId}
-                onChange={(e) => handleSelectChange('assigneeId', e.target.value)}
+                members={assignableMembers}
+                currentUserId={currentUserId}
                 disabled={!canEdit}
-                className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-70"
-              >
-                <option value="">Unassigned</option>
-                {(isPrivileged
-                  ? projectMembers
-                  : projectMembers.filter((m) => m.userId === currentUserId)
-                ).map((m) => (
-                  <option key={m.userId} value={m.userId}>
-                    {m.name || m.email}
-                  </option>
-                ))}
-              </select>
+                onChange={(value) => handleSelectChange('assigneeId', value)}
+              />
             </div>
 
             <div>
@@ -556,6 +550,16 @@ const TaskDetailModal = ({
               <p>Last updated {new Date(task.updatedAt).toLocaleString()}</p>
             )}
           </div>
+
+          {/* ─── Comments ─── */}
+          <div className="pt-4 border-t border-gray-200 dark:border-gray-800">
+            <CommentList
+              projectId={projectId}
+              taskId={task.id}
+              currentUserId={currentUserId}
+              currentUserRole={currentUserRole}
+            />
+          </div>
         </div>
 
         {/* Delete confirmation overlay */}
@@ -568,6 +572,216 @@ const TaskDetailModal = ({
           />
         )}
       </div>
+    </div>
+  );
+};
+
+// =============================================================
+// AssigneeSelect - rich dropdown with avatars + names + emails
+// =============================================================
+// A native <select> can only render text — we build our own
+// popover to show avatars, names, emails, and a "(you)" badge.
+const AssigneeSelect = ({ value, members, currentUserId, disabled, onChange }) => {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef(null);
+
+  const selected = members.find((m) => m.userId === value);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  // Escape closes
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [open]);
+
+  const handleSelect = (userId) => {
+    onChange(userId);
+    setOpen(false);
+  };
+
+  return (
+    <div className="relative" ref={wrapRef}>
+      {/* Trigger */}
+      <button
+        type="button"
+        onClick={() => !disabled && setOpen((v) => !v)}
+        disabled={disabled}
+        className="w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-left text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-70 disabled:cursor-not-allowed transition-colors"
+      >
+        {selected ? (
+          <>
+            <UserAvatar
+              name={selected.name}
+              email={selected.email}
+              image={selected.avatarUrl}
+              size="sm"
+            />
+            <span className="flex-1 min-w-0 truncate text-gray-900 dark:text-white">
+              {selected.name || selected.email}
+            </span>
+            {selected.userId === currentUserId && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 flex-shrink-0">
+                YOU
+              </span>
+            )}
+          </>
+        ) : (
+          <>
+            <span className="w-5 h-5 rounded-full border border-dashed border-gray-300 dark:border-gray-600 flex-shrink-0" />
+            <span className="flex-1 min-w-0 truncate text-gray-500 dark:text-gray-400">
+              Unassigned
+            </span>
+          </>
+        )}
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          className="text-gray-400 flex-shrink-0"
+        >
+          <path
+            d="M6 9l6 6 6-6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </button>
+
+      {/* Menu */}
+      {open && (
+        <div className="absolute top-full left-0 right-0 mt-1 z-30 bg-white dark:bg-gray-900 rounded-lg shadow-xl border border-gray-200 dark:border-gray-800 max-h-64 overflow-y-auto">
+          {/* Unassign option */}
+          <button
+            type="button"
+            onClick={() => handleSelect('')}
+            className={`w-full flex items-center gap-2 px-3 py-2 text-left text-sm transition-colors ${
+              !value
+                ? 'bg-indigo-50 dark:bg-indigo-950'
+                : 'hover:bg-gray-50 dark:hover:bg-gray-800'
+            }`}
+          >
+            <span className="w-5 h-5 rounded-full border border-dashed border-gray-300 dark:border-gray-600 flex-shrink-0" />
+            <span className="text-gray-500 dark:text-gray-400">
+              Unassigned
+            </span>
+          </button>
+
+          {/* Divider */}
+          {members.length > 0 && (
+            <div className="border-t border-gray-200 dark:border-gray-800" />
+          )}
+
+          {/* Members */}
+          {members.map((m) => {
+            const isSelected = m.userId === value;
+            const isMe = m.userId === currentUserId;
+            return (
+              <button
+                key={m.userId}
+                type="button"
+                onClick={() => handleSelect(m.userId)}
+                className={`w-full flex items-center gap-2 px-3 py-2 text-left text-sm transition-colors ${
+                  isSelected
+                    ? 'bg-indigo-50 dark:bg-indigo-950'
+                    : 'hover:bg-gray-50 dark:hover:bg-gray-800'
+                }`}
+              >
+                <UserAvatar
+                  name={m.name}
+                  email={m.email}
+                  image={m.avatarUrl}
+                  size="sm"
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                    {m.name || m.email}
+                  </p>
+                  {m.name && m.email && (
+                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                      {m.email}
+                    </p>
+                  )}
+                </div>
+                {isMe && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 flex-shrink-0">
+                    YOU
+                  </span>
+                )}
+                {isSelected && !isMe && (
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="3"
+                    className="text-indigo-600 dark:text-indigo-400 flex-shrink-0"
+                  >
+                    <path
+                      d="M20 6L9 17l-5-5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// =============================================================
+// UserAvatar - reusable avatar (image or initials)
+// =============================================================
+const UserAvatar = ({ name, email, image, size = 'sm' }) => {
+  const dim = size === 'sm' ? 'w-6 h-6' : 'w-8 h-8';
+  const textSize = size === 'sm' ? 'text-[10px]' : 'text-xs';
+
+  const initials = (name || email || '?')
+    .trim()
+    .split(/\s+/)
+    .map((s) => s[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+
+  if (image) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={image}
+        alt={name || 'User'}
+        className={`${dim} rounded-full object-cover flex-shrink-0`}
+      />
+    );
+  }
+
+  return (
+    <div
+      className={`${dim} rounded-full bg-indigo-600 text-white flex items-center justify-center font-semibold flex-shrink-0 ${textSize}`}
+    >
+      {initials}
     </div>
   );
 };

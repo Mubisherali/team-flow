@@ -231,3 +231,31 @@ export function canMoveTaskTo({ role, userId, task, newStatus }) {
 
   return true;
 }
+
+
+
+// -------------------------------------------------------------
+// COMMENT PERMISSIONS
+// -------------------------------------------------------------
+
+// Can the user delete this specific comment?
+//
+// RULES:
+//   - The author can always delete their own comment
+//   - OWNER/MANAGER can delete any comment (moderation)
+//   - Everyone else → no
+//
+// Pure function. Takes the comment + caller + their role.
+export function canDeleteComment({ role, userId, comment }) {
+  if (!comment || !userId) return false;
+  if (comment.userId === userId) return true;      // own comment
+  return isManagerOrOwner(role);                    // moderation
+}
+
+// Can the user edit this comment?
+// Only the author can edit. Managers can delete but not
+// rewrite someone else's words.
+export function canEditComment({ userId, comment }) {
+  if (!comment || !userId) return false;
+  return comment.userId === userId;
+}
