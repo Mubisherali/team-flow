@@ -13,26 +13,26 @@
 //   - MEMBER of the workspace         → only if project member
 // -------------------------------------------------------------
 
-import { notFound, redirect } from 'next/navigation';
-import Link from 'next/link';
-import { getServerSession } from 'next-auth';
+import { notFound, redirect } from "next/navigation";
+import Link from "next/link";
+import { getServerSession } from "next-auth";
 
-import { authOptions } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { authOptions } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 import {
   getMemberRole,
   canViewWorkspace,
   canManageProjectMembers,
-} from '@/lib/permissions';
-import ManageMembersButton from '@/components/project/ManageMembersButton';
-import ProjectTasksSection from '@/components/task/ProjectTasksSection';
-import { DEFAULT_PROJECT_COLOR } from '@/lib/project-colors';
+} from "@/lib/permissions";
+import ManageMembersButton from "@/components/project/ManageMembersButton";
+import ProjectTasksSection from "@/components/task/ProjectTasksSection";
+import { DEFAULT_PROJECT_COLOR } from "@/lib/project-colors";
 
 export default async function ProjectDetailPage({ params }) {
   // ─── Auth ───
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
-    redirect('/login');
+    redirect("/login");
   }
 
   const { id: workspaceId, projectId } = await params;
@@ -59,7 +59,7 @@ export default async function ProjectDetailPage({ params }) {
   }
 
   // ─── Regular members can only see projects they belong to ───
-  const isPrivileged = role === 'OWNER' || role === 'MANAGER';
+  const isPrivileged = role === "OWNER" || role === "MANAGER";
 
   if (!isPrivileged) {
     const isProjectMember = await prisma.projectMember.findUnique({
@@ -85,7 +85,7 @@ export default async function ProjectDetailPage({ params }) {
         },
         _count: { select: { comments: true } },
       },
-      orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
+      orderBy: [{ order: "asc" }, { createdAt: "asc" }],
     }),
 
     prisma.projectMember.findMany({
@@ -95,7 +95,7 @@ export default async function ProjectDetailPage({ params }) {
           select: { id: true, name: true, email: true, avatarUrl: true },
         },
       },
-      orderBy: { addedAt: 'asc' },
+      orderBy: { addedAt: "asc" },
     }),
 
     prisma.workspaceMember.findMany({
@@ -105,7 +105,7 @@ export default async function ProjectDetailPage({ params }) {
           select: { id: true, name: true, email: true, avatarUrl: true },
         },
       },
-      orderBy: { joinedAt: 'asc' },
+      orderBy: { joinedAt: "asc" },
     }),
   ]);
 
@@ -293,6 +293,7 @@ export default async function ProjectDetailPage({ params }) {
       {/* ─── Kanban Board ─── */}
       <section className="mb-10">
         <ProjectTasksSection
+          workspaceId={workspaceId}
           projectId={projectId}
           initialTasks={shapedTasks}
           projectMembers={shapedProjectMembers}
@@ -365,12 +366,12 @@ const StatCard = ({ label, value, icon }) => (
 // MemberChip
 // =============================================================
 const MemberChip = ({ member }) => {
-  const initials = (member.name || member.email || '?')
+  const initials = (member.name || member.email || "?")
     .trim()
     .split(/\s+/)
     .map((s) => s[0])
     .slice(0, 2)
-    .join('')
+    .join("")
     .toUpperCase();
 
   return (

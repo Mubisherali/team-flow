@@ -1,20 +1,6 @@
 // -------------------------------------------------------------
 // ProjectTasksSection - Orchestrator for the Kanban board
 // -------------------------------------------------------------
-//
-// PROPS:
-//   projectId       : string
-//   initialTasks    : array (server-fetched)
-//   projectMembers  : array
-//   currentUserId   : string
-//   workspaceRole   : 'OWNER' | 'MANAGER' | 'MEMBER'
-//
-// WORKFLOW:
-//   Passes currentUserId + workspaceRole down to KanbanBoard,
-//   CreateTaskModal, and TaskDetailModal so they can enforce
-//   the assignment + workflow rules client-side (server re-checks).
-// -------------------------------------------------------------
-
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
@@ -28,6 +14,7 @@ import { filterTasks } from '@/lib/kanban';
 
 const ProjectTasksSection = ({
   projectId,
+  workspaceId,
   initialTasks,
   projectMembers,
   currentUserId,
@@ -52,19 +39,16 @@ const ProjectTasksSection = ({
     [initialTasks, filters, currentUserId]
   );
 
-  // Task shown in detail modal
   const detailTask = detailTaskId
     ? initialTasks.find((t) => t.id === detailTaskId) || null
     : null;
 
-  // Close detail modal if the task disappears
   useEffect(() => {
     if (detailTaskId && !detailTask) {
       setDetailTaskId(null);
     }
   }, [detailTaskId, detailTask]);
 
-  // Permission for editing a specific task
   const isPrivileged =
     workspaceRole === 'OWNER' || workspaceRole === 'MANAGER';
 
@@ -76,7 +60,7 @@ const ProjectTasksSection = ({
     return false;
   };
 
-  // Handlers
+  // ─── Handlers ───
   const handleOpenTask = (taskId) => setDetailTaskId(taskId);
 
   const handleOpenCreate = (defaultStatus = 'TODO') =>
@@ -86,6 +70,20 @@ const ProjectTasksSection = ({
     setCreateModal((prev) => ({ ...prev, isOpen: false }));
 
   const handleTaskDeleted = () => setDetailTaskId(null);
+
+  // Navigate to the full task page
+  const handleOpenFull = (taskId) => {
+    router.push(
+      `/workspaces/${workspaceId}/projects/${projectId}/tasks/${taskId}`
+    );
+  };
+
+  // Navigate to the task page + scroll to comments
+  const handleAskQuestion = (taskId) => {
+    router.push(
+      `/workspaces/${workspaceId}/projects/${projectId}/tasks/${taskId}#comments`
+    );
+  };
 
   const totalCount = initialTasks.length;
   const visibleCount = visibleTasks.length;
@@ -147,6 +145,8 @@ const ProjectTasksSection = ({
           initialTasks={visibleTasks}
           onOpenTask={handleOpenTask}
           onAddTask={handleOpenCreate}
+          onOpenFull={handleOpenFull}
+          onAskQuestion={handleAskQuestion}
           currentUserId={currentUserId}
           currentUserRole={workspaceRole}
         />

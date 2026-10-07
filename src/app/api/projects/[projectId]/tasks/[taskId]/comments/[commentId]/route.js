@@ -1,22 +1,3 @@
-// -------------------------------------------------------------
-// /api/projects/[projectId]/tasks/[taskId]/comments/[commentId]
-// -------------------------------------------------------------
-//
-// PATCH  : Edit a comment (author only)
-// DELETE : Delete a comment (author OR workspace owner/manager)
-//
-// AUTHORIZATION:
-//   PATCH  — only the comment author can edit
-//   DELETE — author OR privileged (manager/owner can moderate)
-//
-// RATIONALE:
-//   Managers can silence a comment by removing it, but they
-//   cannot rewrite someone else's words.
-//
-// This is enforced on the server. The UI hides the edit
-// button on others' comments anyway.
-// -------------------------------------------------------------
-
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 

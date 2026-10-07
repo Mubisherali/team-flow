@@ -16,22 +16,24 @@
 //      reordering with the sortable preset)
 // -------------------------------------------------------------
 
-'use client';
+"use client";
 
-import { useDroppable } from '@dnd-kit/core';
+import { useDroppable } from "@dnd-kit/core";
 import {
   SortableContext,
   verticalListSortingStrategy,
-} from '@dnd-kit/sortable';
+} from "@dnd-kit/sortable";
 
-import TaskCard from './TaskCard';
-import { statusMeta } from '@/lib/task-constants';
+import TaskCard from "./TaskCard";
+import { statusMeta } from "@/lib/task-constants";
 
 const KanbanColumn = ({
   status,
   tasks,
   onOpenTask,
   onAddTask,
+  onOpenFull,
+  onAskQuestion,
   activeTaskId,
 }) => {
   const meta = statusMeta(status);
@@ -67,8 +69,8 @@ const KanbanColumn = ({
         ref={setNodeRef}
         className={`flex-1 flex flex-col gap-2 p-2 rounded-xl border-2 transition-colors min-h-[200px] ${
           isOver
-            ? 'border-indigo-400 dark:border-indigo-600 bg-indigo-50/50 dark:bg-indigo-950/30'
-            : 'border-transparent bg-gray-50/70 dark:bg-gray-900/40'
+            ? "border-indigo-400 dark:border-indigo-600 bg-indigo-50/50 dark:bg-indigo-950/30"
+            : "border-transparent bg-gray-50/70 dark:bg-gray-900/40"
         }`}
       >
         <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
@@ -77,6 +79,8 @@ const KanbanColumn = ({
               key={task.id}
               task={task}
               onOpen={onOpenTask}
+              onOpenFull={onOpenFull}
+              onAskQuestion={onAskQuestion}
               isDragging={activeTaskId === task.id}
             />
           ))}
@@ -85,9 +89,7 @@ const KanbanColumn = ({
         {/* Empty state */}
         {tasks.length === 0 && (
           <div className="flex-1 flex items-center justify-center py-8">
-            <p className="text-xs text-gray-400 dark:text-gray-600">
-              No tasks
-            </p>
+            <p className="text-xs text-gray-400 dark:text-gray-600">No tasks</p>
           </div>
         )}
 

@@ -23,9 +23,9 @@
 //   4. On API error → revert to snapshot + show error
 // -------------------------------------------------------------
 
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -34,33 +34,31 @@ import {
   useSensor,
   useSensors,
   closestCorners,
-} from '@dnd-kit/core';
+} from "@dnd-kit/core";
 import {
   SortableContext,
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
-} from '@dnd-kit/sortable';
+} from "@dnd-kit/sortable";
 
-import KanbanColumn from './KanbanColumn';
-import TaskCard from './TaskCard';
-import { TASK_STATUSES } from '@/lib/task-constants';
-import {
-  groupTasksByStatus,
-  computeReorder,
-  applyUpdates,
-} from '@/lib/kanban';
+import KanbanColumn from "./KanbanColumn";
+import TaskCard from "./TaskCard";
+import { TASK_STATUSES } from "@/lib/task-constants";
+import { groupTasksByStatus, computeReorder, applyUpdates } from "@/lib/kanban";
 
 const KanbanBoard = ({
   projectId,
   initialTasks,
   onOpenTask,
   onAddTask,
+  onOpenFull,
+  onAskQuestion,
   currentUserId,
   currentUserRole,
 }) => {
   const [tasks, setTasks] = useState(initialTasks || []);
   const [activeTaskId, setActiveTaskId] = useState(null);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
 
   // Sync when the parent re-fetches
   useEffect(() => {
@@ -68,7 +66,7 @@ const KanbanBoard = ({
   }, [initialTasks]);
 
   const isPrivileged =
-    currentUserRole === 'OWNER' || currentUserRole === 'MANAGER';
+    currentUserRole === "OWNER" || currentUserRole === "MANAGER";
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -76,7 +74,7 @@ const KanbanBoard = ({
     }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
-    })
+    }),
   );
 
   const grouped = groupTasksByStatus(tasks);
@@ -97,12 +95,11 @@ const KanbanBoard = ({
 
     // Members can only move their own tasks.
     const isMyTask =
-      task.assigneeId === currentUserId ||
-      task.createdById === currentUserId;
+      task.assigneeId === currentUserId || task.createdById === currentUserId;
     if (!isMyTask) return false;
 
     // Members can never move to DONE.
-    if (newStatus === 'DONE') return false;
+    if (newStatus === "DONE") return false;
 
     return true;
   };
@@ -112,7 +109,7 @@ const KanbanBoard = ({
   // -----------------------------------------------------------
   const handleDragStart = (event) => {
     setActiveTaskId(event.active.id);
-    setError('');
+    setError("");
   };
 
   const handleDragCancel = () => {
@@ -135,9 +132,9 @@ const KanbanBoard = ({
     let newStatus;
     let newIndex;
 
-    if (typeof overId === 'string' && overId.startsWith('column-')) {
+    if (typeof overId === "string" && overId.startsWith("column-")) {
       // Dropped on column whitespace
-      newStatus = overId.replace('column-', '');
+      newStatus = overId.replace("column-", "");
       const destTasks = grouped[newStatus] || [];
       newIndex = destTasks.filter((t) => t.id !== draggedTaskId).length;
     } else {
@@ -157,15 +154,15 @@ const KanbanBoard = ({
 
     // ── Permission check BEFORE optimistic update ──
     if (!canMoveTaskTo(draggedTask, newStatus)) {
-      if (newStatus === 'DONE') {
+      if (newStatus === "DONE") {
         setError(
-          'Only managers can move tasks to Done. Move it to Review for approval.'
+          "Only managers can move tasks to Done. Move it to Review for approval.",
         );
       } else {
-        setError('You can only move your own tasks.');
+        setError("You can only move your own tasks.");
       }
       // Auto-clear after a few seconds
-      setTimeout(() => setError(''), 5000);
+      setTimeout(() => setError(""), 5000);
       return;
     }
 
@@ -185,26 +182,23 @@ const KanbanBoard = ({
     setTasks(next);
 
     try {
-      const res = await fetch(
-        `/api/projects/${projectId}/tasks/reorder`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ taskId, newStatus, newIndex }),
-        }
-      );
+      const res = await fetch(`/api/projects/${projectId}/tasks/reorder`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ taskId, newStatus, newIndex }),
+      });
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         setTasks(snapshot);
-        setError(data.error || 'Failed to move task');
-        setTimeout(() => setError(''), 5000);
+        setError(data.error || "Failed to move task");
+        setTimeout(() => setError(""), 5000);
       }
     } catch (err) {
-      console.error('[REORDER_FETCH]', err);
+      console.error("[REORDER_FETCH]", err);
       setTasks(snapshot);
-      setError('Network error. Please try again.');
-      setTimeout(() => setError(''), 5000);
+      setError("Network error. Please try again.");
+      setTimeout(() => setError(""), 5000);
     }
   };
 
@@ -231,7 +225,7 @@ const KanbanBoard = ({
             {error}
           </p>
           <button
-            onClick={() => setError('')}
+            onClick={() => setError("")}
             className="text-amber-600 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-200"
             aria-label="Dismiss"
           >
@@ -264,6 +258,8 @@ const KanbanBoard = ({
               tasks={grouped[status.value] || []}
               onOpenTask={onOpenTask}
               onAddTask={onAddTask}
+              onOpenFull={onOpenFull}
+              onAskQuestion={onAskQuestion}
               activeTaskId={activeTaskId}
             />
           ))}
@@ -272,7 +268,13 @@ const KanbanBoard = ({
         <DragOverlay dropAnimation={null}>
           {activeTask ? (
             <div className="rotate-2 opacity-95 shadow-xl">
-              <TaskCard task={activeTask} onOpen={null} isDragging={false} />
+              <TaskCard
+                task={activeTask}
+                onOpen={null}
+                onOpenFull={null}
+                onAskQuestion={null}
+                isDragging={false}
+              />{" "}
             </div>
           ) : null}
         </DragOverlay>

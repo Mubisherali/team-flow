@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState } from 'react';
@@ -16,6 +15,7 @@ const Sidebar = ({ user, workspaces }) => {
 
   const workspaceId = params?.id;
   const projectId = params?.projectId;
+  const taskId = params?.taskId;
 
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
@@ -51,13 +51,7 @@ const Sidebar = ({ user, workspaces }) => {
   // NAV ITEM
   // -----------------------------------------------------------
 
-  const NavItem = ({
-    href,
-    icon,
-    children,
-    exact = false,
-    badge,
-  }) => {
+  const NavItem = ({ href, icon, children, exact = false, badge }) => {
     const active = isActive(href, exact);
 
     return (
@@ -73,7 +67,6 @@ const Sidebar = ({ user, workspaces }) => {
           }
         `}
       >
-        {/* Active indicator */}
         {active && (
           <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 rounded-r-full bg-indigo-600 dark:bg-indigo-500" />
         )}
@@ -165,6 +158,21 @@ const Sidebar = ({ user, workspaces }) => {
       </svg>
     ),
 
+    file: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <path
+          d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <path
+          d="M14 2v6h6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    ),
+
     settings: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
         <circle cx="12" cy="12" r="3" />
@@ -221,9 +229,7 @@ const Sidebar = ({ user, workspaces }) => {
         border-r border-gray-200 dark:border-white/[0.06]
       "
     >
-      {/* =====================================================
-          BRAND
-      ===================================================== */}
+      {/* BRAND */}
 
       <div className="px-5 py-5 border-b border-gray-200 dark:border-white/[0.06]">
         <Link href="/workspaces" className="flex items-center gap-3 group">
@@ -253,9 +259,7 @@ const Sidebar = ({ user, workspaces }) => {
         </Link>
       </div>
 
-      {/* =====================================================
-          NAVIGATION
-      ===================================================== */}
+      {/* NAVIGATION */}
 
       <nav className="flex-1 overflow-y-auto px-3 py-5 scrollbar-thin">
         {/* General */}
@@ -265,11 +269,7 @@ const Sidebar = ({ user, workspaces }) => {
         </p>
 
         <div className="space-y-1">
-          <NavItem
-            href="/workspaces"
-            exact
-            icon={icons.grid}
-          >
+          <NavItem href="/workspaces" exact icon={icons.grid}>
             All Workspaces
           </NavItem>
         </div>
@@ -349,9 +349,50 @@ const Sidebar = ({ user, workspaces }) => {
           </div>
         )}
 
-        {/* ===================================================
-            WORKSPACES
-        =================================================== */}
+        {/* ─── Current task ─── */}
+        {workspaceId && projectId && taskId && (
+          <div className="mt-7">
+            <p className="px-3 mb-2 text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400 dark:text-gray-600">
+              Current Task
+            </p>
+
+            <div
+              className="
+                mx-2 mb-2 px-3 py-2
+                rounded-xl
+                bg-gray-50 dark:bg-white/[0.025]
+                border border-gray-200 dark:border-white/[0.05]
+              "
+            >
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50" />
+
+                <span className="text-xs font-medium text-gray-700 dark:text-gray-300 truncate">
+                  Viewing task
+                </span>
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <NavItem
+                href={`/workspaces/${workspaceId}/projects/${projectId}/tasks/${taskId}`}
+                exact
+                icon={icons.file}
+              >
+                Task details
+              </NavItem>
+
+              <NavItem
+                href={`/workspaces/${workspaceId}/projects/${projectId}/tasks/${taskId}#comments`}
+                icon={icons.users}
+              >
+                Comments
+              </NavItem>
+            </div>
+          </div>
+        )}
+
+        {/* WORKSPACES */}
 
         {safeWorkspaces.length > 0 && (
           <div className="mt-8">
@@ -386,8 +427,6 @@ const Sidebar = ({ user, workspaces }) => {
                       }
                     `}
                   >
-                    {/* Workspace avatar */}
-
                     <span
                       className={`
                         w-7 h-7 rounded-lg
@@ -451,13 +490,9 @@ const Sidebar = ({ user, workspaces }) => {
         )}
       </nav>
 
-      {/* =====================================================
-          USER AREA
-      ===================================================== */}
+      {/* USER AREA */}
 
       <div className="relative p-3 border-t border-gray-200 dark:border-white/[0.06]">
-        {/* Dropdown */}
-
         {userMenuOpen && (
           <>
             <div
@@ -477,7 +512,7 @@ const Sidebar = ({ user, workspaces }) => {
               "
             >
               <Link
-                href="/settings"
+                href="/settings/profile"
                 onClick={() => setUserMenuOpen(false)}
                 className="
                   flex items-center gap-3
@@ -515,8 +550,6 @@ const Sidebar = ({ user, workspaces }) => {
           </>
         )}
 
-        {/* User button */}
-
         <button
           type="button"
           onClick={() => setUserMenuOpen((v) => !v)}
@@ -527,8 +560,6 @@ const Sidebar = ({ user, workspaces }) => {
             transition-all duration-200
           "
         >
-          {/* Avatar */}
-
           {safeUser.image ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -555,8 +586,6 @@ const Sidebar = ({ user, workspaces }) => {
             </div>
           )}
 
-          {/* User info */}
-
           <div className="flex-1 min-w-0 text-left">
             <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">
               {safeUser.name || 'User'}
@@ -566,8 +595,6 @@ const Sidebar = ({ user, workspaces }) => {
               {safeUser.email || 'Account'}
             </p>
           </div>
-
-          {/* Chevron */}
 
           <span
             className={`
@@ -586,4 +613,3 @@ const Sidebar = ({ user, workspaces }) => {
 };
 
 export default Sidebar;
-

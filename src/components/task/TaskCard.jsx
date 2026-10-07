@@ -3,40 +3,101 @@
 // -------------------------------------------------------------
 //
 // PROPS:
-//   task       : the task object
-//   onOpen     : (taskId) => void — open the detail modal
-//   isDragging : boolean — true when THIS card is being dragged
+//   task            : the task object
+//   onOpen          : (taskId) => void — open the detail modal
+//   onOpenFull      : (taskId) => void — navigate to task page
+//   onAskQuestion   : (taskId) => void — navigate to task page #comments
+//   isDragging      : boolean — true when THIS card is being dragged
+//
+// INTERACTIONS:
+//   - Click card (no movement)     → onOpen (modal)
+//   - Drag card                    → dnd-kit handles it
+//   - Click ⋯ button (top-right)   → opens the card menu
+//   - Menu: "Open full task"       → onOpenFull
+//   - Menu: "Ask a question"       → onAskQuestion
+//   - Click outside / Escape       → closes the menu
 //
 // DONE TREATMENT:
-//   When task.status === 'DONE', the card is visually muted:
-//     - opacity reduced
-//     - title struck through
-//     - priority dot dimmed
-//     - due date hidden (irrelevant once complete)
-//     - label chips dimmed
-//   Still clickable (managers may reopen).
+//   Faded, strikethrough title, gray priority dot, no due date.
 //
 // CLICK VS DRAG:
-//   dnd-kit uses an activation constraint (set on the parent's
-//   PointerSensor). A short press without movement → click.
-//   Movement beyond threshold → drag.
+//   dnd-kit's activationConstraint handles this on the parent.
+//   A click without movement fires onClick; a drag doesn't.
+//   The ⋯ button calls stopPropagation so clicking it never
+//   triggers the card's onClick.
 // -------------------------------------------------------------
 
 'use client';
 
+import { useState, useEffect, useRef } from 'react';
 import { useDraggable } from '@dnd-kit/core';
 
 import { priorityMeta, dueDateMeta } from '@/lib/task-constants';
 
-const TaskCard = ({ task, onOpen, isDragging }) => {
+const TaskCard = ({
+  task,
+  onOpen,
+  onOpenFull,
+  onAskQuestion,
+  isDragging,
+}) => {
   const { attributes, listeners, setNodeRef } = useDraggable({
     id: task.id,
     data: { status: task.status },
   });
 
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef(null);
+
   const priority = priorityMeta(task.priority);
   const due = dueDateMeta(task.dueDate);
   const isDone = task.status === 'DONE';
+
+  // Close the menu on outside click
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handler = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [menuOpen]);
+
+  // Close on Escape
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handler = (e) => {
+      if (e.key === 'Escape') setMenuOpen(false);
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [menuOpen]);
+
+  const handleCardClick = () => {
+    // Don't open the modal while the menu is open
+    if (menuOpen) return;
+    onOpen?.(task.id);
+  };
+
+  const handleMenuButtonClick = (e) => {
+    // Critical: don't let the card's onClick fire
+    e.stopPropagation();
+    setMenuOpen((v) => !v);
+  };
+
+  const handleOpenFull = (e) => {
+    e.stopPropagation();
+    setMenuOpen(false);
+    onOpenFull?.(task.id);
+  };
+
+  const handleAskQuestion = (e) => {
+    e.stopPropagation();
+    setMenuOpen(false);
+    onAskQuestion?.(task.id);
+  };
 
   const style = {
     opacity: isDragging ? 0.4 : isDone ? 0.6 : 1,
@@ -48,23 +109,105 @@ const TaskCard = ({ task, onOpen, isDragging }) => {
       style={style}
       {...listeners}
       {...attributes}
-      onClick={() => onOpen?.(task.id)}
-      className={`group rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3 cursor-pointer hover:border-indigo-300 dark:hover:border-indigo-800 hover:shadow-sm transition-all ${
+      onClick={handleCardClick}
+      className={`relative group rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3 cursor-pointer hover:border-indigo-300 dark:hover:border-indigo-800 hover:shadow-sm transition-all ${
         isDragging ? 'cursor-grabbing' : ''
       } ${isDone ? 'hover:opacity-80' : ''}`}
     >
-      {/* Title — struck through when DONE */}
-      <p
-        className={`text-sm font-medium leading-snug line-clamp-2 mb-2 ${
-          isDone
-            ? 'text-gray-400 dark:text-gray-500 line-through'
-            : 'text-gray-900 dark:text-white'
-        }`}
-      >
-        {task.title}
-      </p>
+      {/* Title row + menu trigger */}
+      <div className="flex items-start gap-2 mb-2">
+        <p
+          className={`flex-1 text-sm font-medium leading-snug line-clamp-2 ${
+            isDone
+              ? 'text-gray-400 dark:text-gray-500 line-through'
+              : 'text-gray-900 dark:text-white'
+          }`}
+        >
+          {task.title}
+        </p>
 
-      {/* Labels — dimmed when DONE */}
+        {/* ⋯ Menu trigger — appears on hover */}
+        <div ref={menuRef} className="relative flex-shrink-0">
+          <button
+            type="button"
+            onClick={handleMenuButtonClick}
+            onPointerDown={(e) => e.stopPropagation()}
+            className={`p-1 rounded-md text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-opacity ${
+              menuOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+            }`}
+            title="More actions"
+            aria-label="More actions"
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <circle cx="5" cy="12" r="1.5" fill="currentColor" />
+              <circle cx="12" cy="12" r="1.5" fill="currentColor" />
+              <circle cx="19" cy="12" r="1.5" fill="currentColor" />
+            </svg>
+          </button>
+
+          {/* Menu */}
+          {menuOpen && (
+            <div
+              className="absolute right-0 top-full mt-1 z-30 w-48 bg-white dark:bg-gray-900 rounded-lg shadow-xl border border-gray-200 dark:border-gray-800 py-1"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                type="button"
+                onClick={handleOpenFull}
+                className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              >
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <path
+                    d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path d="M14 2v6h6" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                Open full task
+              </button>
+
+              <button
+                type="button"
+                onClick={handleAskQuestion}
+                className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              >
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <path
+                    d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+                Ask a question
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Labels — dimmed/hidden when DONE */}
       {task.labels && task.labels.length > 0 && !isDone && (
         <div className="flex flex-wrap gap-1 mb-2">
           {task.labels.slice(0, 3).map((label) => (
@@ -85,7 +228,6 @@ const TaskCard = ({ task, onOpen, isDragging }) => {
 
       {/* Footer */}
       <div className="flex items-center gap-2 text-xs">
-        {/* Priority dot — dimmed when DONE */}
         <span
           className={`w-2 h-2 rounded-full flex-shrink-0 ${
             isDone ? 'bg-gray-300 dark:bg-gray-600' : priority.dot
@@ -93,7 +235,6 @@ const TaskCard = ({ task, onOpen, isDragging }) => {
           title={isDone ? 'Completed' : `Priority: ${priority.label}`}
         />
 
-        {/* Assignee */}
         {task.assignee ? (
           <Avatar
             name={task.assignee.name}
@@ -113,7 +254,6 @@ const TaskCard = ({ task, onOpen, isDragging }) => {
           />
         )}
 
-        {/* Comment count — kept even when DONE (discussion history) */}
         {task.commentCount > 0 && (
           <span
             className={`flex items-center gap-1 ${
@@ -145,7 +285,6 @@ const TaskCard = ({ task, onOpen, isDragging }) => {
 
         <span className="flex-1" />
 
-        {/* Due date — hidden when DONE (no longer relevant) */}
         {due && !isDone && (
           <span
             className={`flex items-center gap-1 text-[11px] ${due.className}`}
@@ -166,7 +305,6 @@ const TaskCard = ({ task, onOpen, isDragging }) => {
           </span>
         )}
 
-        {/* Completed checkmark for DONE cards */}
         {isDone && (
           <span className="text-[11px] text-green-600 dark:text-green-500 flex items-center gap-1 font-medium">
             <svg
@@ -192,7 +330,7 @@ const TaskCard = ({ task, onOpen, isDragging }) => {
 };
 
 // =============================================================
-// Avatar - small user avatar or initials
+// Avatar
 // =============================================================
 const Avatar = ({ name, email, image, size = 'sm', muted = false }) => {
   const dim = size === 'sm' ? 'w-5 h-5' : 'w-6 h-6';
