@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { usePathname, useRouter, useParams } from 'next/navigation';
 import { signOut } from 'next-auth/react';
 
+import NotificationBell from './NotificationBell';
+
 const Sidebar = ({ user, workspaces }) => {
   const safeUser = user || {};
   const safeWorkspaces = Array.isArray(workspaces) ? workspaces : [];
@@ -58,8 +60,8 @@ const Sidebar = ({ user, workspaces }) => {
       <Link
         href={href}
         className={`
-          group relative flex items-center gap-3 px-3 py-2.5 rounded-xl
-          text-sm font-medium transition-all duration-200
+          group relative flex items-center gap-3 px-3 py-2 rounded-xl
+          text-[13px] font-medium transition-all duration-200
           ${
             active
               ? 'bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 shadow-sm'
@@ -112,39 +114,18 @@ const Sidebar = ({ user, workspaces }) => {
 
     home: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-        <path
-          d="M3 11.5 12 4l9 7.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        <path
-          d="M5 10.5V20h14v-9.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        <path
-          d="M9 20v-5h6v5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
+        <path d="M3 11.5 12 4l9 7.5" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M5 10.5V20h14v-9.5" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M9 20v-5h6v5" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     ),
 
     users: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
         <circle cx="9" cy="7" r="4" />
-        <path
-          d="M3 21v-2a6 6 0 0 1 12 0v2"
-          strokeLinecap="round"
-        />
-        <path
-          d="M16 3.5a4 4 0 0 1 0 7.5"
-          strokeLinecap="round"
-        />
-        <path
-          d="M21 21v-2a6 6 0 0 0-3.5-5.46"
-          strokeLinecap="round"
-        />
+        <path d="M3 21v-2a6 6 0 0 1 12 0v2" strokeLinecap="round" />
+        <path d="M16 3.5a4 4 0 0 1 0 7.5" strokeLinecap="round" />
+        <path d="M21 21v-2a6 6 0 0 0-3.5-5.46" strokeLinecap="round" />
       </svg>
     ),
 
@@ -165,11 +146,7 @@ const Sidebar = ({ user, workspaces }) => {
           strokeLinecap="round"
           strokeLinejoin="round"
         />
-        <path
-          d="M14 2v6h6"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
+        <path d="M14 2v6h6" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     ),
 
@@ -190,20 +167,11 @@ const Sidebar = ({ user, workspaces }) => {
       </svg>
     ),
 
-    plus: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M12 5v14M5 12h14" strokeLinecap="round" />
-      </svg>
-    ),
-
     logout: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
         <path d="M10 17l5-5-5-5" strokeLinecap="round" strokeLinejoin="round" />
         <path d="M15 12H3" strokeLinecap="round" />
-        <path
-          d="M20 4v16a2 2 0 0 1-2 2h-5"
-          strokeLinecap="round"
-        />
+        <path d="M20 4v16a2 2 0 0 1-2 2h-5" strokeLinecap="round" />
       </svg>
     ),
 
@@ -229,41 +197,37 @@ const Sidebar = ({ user, workspaces }) => {
         border-r border-gray-200 dark:border-white/[0.06]
       "
     >
-      {/* BRAND */}
-
-      <div className="px-5 py-5 border-b border-gray-200 dark:border-white/[0.06]">
+      {/* ─── BRAND ─── */}
+      <div className="px-5 py-4 border-b border-gray-200 dark:border-white/[0.06]">
         <Link href="/workspaces" className="flex items-center gap-3 group">
           <div
             className="
-              relative w-9 h-9 rounded-xl
+              relative w-8 h-8 rounded-xl
               bg-gradient-to-br from-indigo-500 to-violet-600
               text-white flex items-center justify-center
-              font-black text-sm
+              font-black text-[13px]
               shadow-lg shadow-indigo-500/20
               group-hover:scale-105 transition-transform
             "
           >
             T
-
             <span className="absolute -right-0.5 -bottom-0.5 w-2.5 h-2.5 rounded-full bg-emerald-400 border-2 border-white dark:border-[#0b0d12]" />
           </div>
 
           <div className="min-w-0">
-            <p className="text-[15px] font-bold tracking-tight text-gray-900 dark:text-white">
+            <p className="text-sm font-bold tracking-tight text-gray-900 dark:text-white">
               TeamFlow
             </p>
-            <p className="text-[10px] text-gray-500 dark:text-gray-500 uppercase tracking-wider">
+            <p className="text-[9.5px] text-gray-500 dark:text-gray-500 uppercase tracking-wider">
               Workspace
             </p>
           </div>
         </Link>
       </div>
 
-      {/* NAVIGATION */}
-
-      <nav className="flex-1 overflow-y-auto px-3 py-5 scrollbar-thin">
+      {/* ─── NAVIGATION ─── */}
+      <nav className="flex-1 overflow-y-auto px-3 py-4 scrollbar-thin">
         {/* General */}
-
         <p className="px-3 mb-2 text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400 dark:text-gray-600">
           General
         </p>
@@ -275,9 +239,8 @@ const Sidebar = ({ user, workspaces }) => {
         </div>
 
         {/* Workspace context */}
-
         {workspaceId && (
-          <div className="mt-7">
+          <div className="mt-6">
             <div className="flex items-center justify-between px-3 mb-2">
               <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400 dark:text-gray-600">
                 Workspace
@@ -285,11 +248,7 @@ const Sidebar = ({ user, workspaces }) => {
             </div>
 
             <div className="space-y-1">
-              <NavItem
-                href={`/workspaces/${workspaceId}`}
-                exact
-                icon={icons.home}
-              >
+              <NavItem href={`/workspaces/${workspaceId}`} exact icon={icons.home}>
                 Overview
               </NavItem>
 
@@ -305,9 +264,8 @@ const Sidebar = ({ user, workspaces }) => {
         )}
 
         {/* Current project */}
-
         {workspaceId && projectId && (
-          <div className="mt-7">
+          <div className="mt-6">
             <p className="px-3 mb-2 text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400 dark:text-gray-600">
               Current Project
             </p>
@@ -322,8 +280,7 @@ const Sidebar = ({ user, workspaces }) => {
             >
               <div className="flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-indigo-500 shadow-sm shadow-indigo-500/50" />
-
-                <span className="text-xs font-medium text-gray-700 dark:text-gray-300 truncate">
+                <span className="text-[11px] font-medium text-gray-700 dark:text-gray-300 truncate">
                   Current project
                 </span>
               </div>
@@ -349,9 +306,9 @@ const Sidebar = ({ user, workspaces }) => {
           </div>
         )}
 
-        {/* ─── Current task ─── */}
+        {/* Current task */}
         {workspaceId && projectId && taskId && (
-          <div className="mt-7">
+          <div className="mt-6">
             <p className="px-3 mb-2 text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400 dark:text-gray-600">
               Current Task
             </p>
@@ -366,8 +323,7 @@ const Sidebar = ({ user, workspaces }) => {
             >
               <div className="flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50" />
-
-                <span className="text-xs font-medium text-gray-700 dark:text-gray-300 truncate">
+                <span className="text-[11px] font-medium text-gray-700 dark:text-gray-300 truncate">
                   Viewing task
                 </span>
               </div>
@@ -392,10 +348,9 @@ const Sidebar = ({ user, workspaces }) => {
           </div>
         )}
 
-        {/* WORKSPACES */}
-
+        {/* Workspaces list */}
         {safeWorkspaces.length > 0 && (
-          <div className="mt-8">
+          <div className="mt-7">
             <div className="flex items-center justify-between px-3 mb-2">
               <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400 dark:text-gray-600">
                 Your Workspaces
@@ -444,7 +399,7 @@ const Sidebar = ({ user, workspaces }) => {
 
                     <span
                       className={`
-                        truncate flex-1 text-sm
+                        truncate flex-1 text-[13px]
                         ${
                           isInsideThis
                             ? 'text-indigo-700 dark:text-indigo-300 font-medium'
@@ -477,7 +432,7 @@ const Sidebar = ({ user, workspaces }) => {
                 type="button"
                 className="
                   w-full mt-2 px-3 py-2
-                  text-xs text-left
+                  text-[11px] text-left
                   text-gray-500 dark:text-gray-500
                   hover:text-gray-800 dark:hover:text-gray-300
                   transition-colors
@@ -490,9 +445,14 @@ const Sidebar = ({ user, workspaces }) => {
         )}
       </nav>
 
-      {/* USER AREA */}
+      {/* ─── NOTIFICATION BELL ─── */}
+      <div className="px-3 pt-2 pb-1 border-t border-gray-200 dark:border-white/[0.06]">
+        <NotificationBell />
+      </div>
 
-      <div className="relative p-3 border-t border-gray-200 dark:border-white/[0.06]">
+      {/* ─── USER AREA ─── */}
+      <div className="relative p-3 pt-1">
+        {/* User dropdown */}
         {userMenuOpen && (
           <>
             <div
@@ -516,16 +476,15 @@ const Sidebar = ({ user, workspaces }) => {
                 onClick={() => setUserMenuOpen(false)}
                 className="
                   flex items-center gap-3
-                  px-3 py-2.5 rounded-xl
-                  text-sm text-gray-700 dark:text-gray-300
+                  px-3 py-2 rounded-xl
+                  text-[13px] text-gray-700 dark:text-gray-300
                   hover:bg-gray-100 dark:hover:bg-white/[0.05]
                   transition-colors
                 "
               >
-                <span className="w-8 h-8 rounded-lg bg-gray-100 dark:bg-white/[0.06] flex items-center justify-center">
+                <span className="w-7 h-7 rounded-lg bg-gray-100 dark:bg-white/[0.06] flex items-center justify-center">
                   {icons.user}
                 </span>
-
                 Profile settings
               </Link>
 
@@ -534,22 +493,22 @@ const Sidebar = ({ user, workspaces }) => {
                 onClick={handleLogout}
                 className="
                   w-full flex items-center gap-3
-                  px-3 py-2.5 rounded-xl
-                  text-sm text-red-600 dark:text-red-400
+                  px-3 py-2 rounded-xl
+                  text-[13px] text-red-600 dark:text-red-400
                   hover:bg-red-50 dark:hover:bg-red-500/10
                   transition-colors
                 "
               >
-                <span className="w-8 h-8 rounded-lg bg-red-50 dark:bg-red-500/10 flex items-center justify-center">
+                <span className="w-7 h-7 rounded-lg bg-red-50 dark:bg-red-500/10 flex items-center justify-center">
                   {icons.logout}
                 </span>
-
                 Log out
               </button>
             </div>
           </>
         )}
 
+        {/* User button */}
         <button
           type="button"
           onClick={() => setUserMenuOpen((v) => !v)}
@@ -578,7 +537,7 @@ const Sidebar = ({ user, workspaces }) => {
                 bg-gradient-to-br from-indigo-500 to-violet-600
                 text-white
                 flex items-center justify-center
-                text-xs font-bold
+                text-[11px] font-bold
                 flex-shrink-0
               "
             >
@@ -587,11 +546,10 @@ const Sidebar = ({ user, workspaces }) => {
           )}
 
           <div className="flex-1 min-w-0 text-left">
-            <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">
+            <p className="text-[13px] font-semibold text-gray-900 dark:text-white truncate">
               {safeUser.name || 'User'}
             </p>
-
-            <p className="text-[11px] text-gray-500 dark:text-gray-500 truncate mt-0.5">
+            <p className="text-[10.5px] text-gray-500 dark:text-gray-500 truncate mt-0.5">
               {safeUser.email || 'Account'}
             </p>
           </div>

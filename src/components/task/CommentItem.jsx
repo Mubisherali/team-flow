@@ -2,22 +2,19 @@
 // CommentItem - Single comment in a task's thread
 // -------------------------------------------------------------
 //
+// VISUAL STYLE:
+//   Each comment is rendered as a soft card — a subtle gray
+//   container with rounded corners. Name + time at the top,
+//   content below. Actions (edit/delete) sit in the top-right
+//   on hover. This is the "inbox" look — organized, scannable,
+//   like emails in a thread.
+//
 // PROPS:
 //   comment         : { id, user, content, createdAt, updatedAt, isEdited }
 //   currentUserId   : string
 //   currentUserRole : 'OWNER' | 'MANAGER' | 'MEMBER'
 //   onEdit          : (commentId, newContent) => Promise<void>
 //   onDelete        : (commentId) => Promise<void>
-//
-// VISUAL STYLE:
-//   Not a chat bubble. A "document" comment — avatar + header
-//   line + body text. Matches Linear / GitHub Issues.
-//
-// INTERACTIONS:
-//   - Edit: inline textarea replaces the body, save on Ctrl+Enter
-//     or clicking "Save". Cancel reverts.
-//   - Delete: inline confirmation (click trash → small confirm).
-//   - Actions appear on hover (or always on touch devices).
 // -------------------------------------------------------------
 
 'use client';
@@ -47,13 +44,12 @@ const CommentItem = ({
   const canEdit = isAuthor;
   const canDelete = isAuthor || isPrivileged;
 
-  // Keep draft in sync if the comment changes externally
-  // (e.g. after a refresh).
+  // Keep draft in sync when not editing
   useEffect(() => {
     if (!editing) setDraft(comment.content);
   }, [comment.content, editing]);
 
-  // Focus + auto-size the textarea when entering edit mode.
+  // Autofocus the textarea in edit mode
   useEffect(() => {
     if (editing && textareaRef.current) {
       const el = textareaRef.current;
@@ -99,7 +95,6 @@ const CommentItem = ({
       return;
     }
     if (trimmed === comment.content.trim()) {
-      // No change → just close
       handleCancelEdit();
       return;
     }
@@ -142,7 +137,6 @@ const CommentItem = ({
     setError('');
     try {
       await onDelete(comment.id);
-      // Parent removes it from the list; nothing more to do here.
     } catch (err) {
       setError(err.message || 'Failed to delete comment');
       setDeleting(false);
@@ -153,25 +147,27 @@ const CommentItem = ({
   // RENDER
   // -----------------------------------------------------------
   return (
-    <div className="flex gap-3 group">
-      {/* Avatar (persistent across view/edit) */}
-      {comment.user.avatarUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={comment.user.avatarUrl}
-          alt={displayName}
-          className="w-8 h-8 rounded-full object-cover flex-shrink-0 mt-0.5"
-        />
-      ) : (
-        <div className="w-8 h-8 rounded-full bg-indigo-600 text-white flex items-center justify-center text-xs font-semibold flex-shrink-0 mt-0.5">
-          {initials}
-        </div>
-      )}
+    <div className="group flex gap-3.5 items-start">
+      {/* Avatar */}
+      <div className="flex-shrink-0 pt-0.5">
+        {comment.user.avatarUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={comment.user.avatarUrl}
+            alt={displayName}
+            className="w-9 h-9 rounded-full object-cover"
+          />
+        ) : (
+          <div className="w-9 h-9 rounded-full bg-indigo-600 text-white flex items-center justify-center text-xs font-semibold">
+            {initials}
+          </div>
+        )}
+      </div>
 
       {/* Body */}
       <div className="flex-1 min-w-0">
-        {/* Header line: name + timestamp + (edited) */}
-        <div className="flex items-baseline gap-2 mb-1">
+        {/* Header line: name + time + (edited) + actions */}
+        <div className="flex items-center gap-2 mb-1.5">
           <span className="text-sm font-semibold text-gray-900 dark:text-white truncate">
             {displayName}
           </span>
@@ -190,18 +186,17 @@ const CommentItem = ({
             </span>
           )}
 
-          {/* Spacer */}
           <span className="flex-1" />
 
-          {/* Actions (hover or when no edit) */}
+          {/* Actions — hover on desktop, always visible on mobile */}
           {!editing && (canEdit || canDelete) && (
-            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+            <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity flex-shrink-0">
               {canEdit && (
                 <button
                   type="button"
                   onClick={handleStartEdit}
                   disabled={deleting}
-                  className="p-1 rounded-md text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-40 transition-colors"
+                  className="p-1 rounded-md text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white dark:hover:bg-gray-800 disabled:opacity-40 transition-colors"
                   title="Edit comment"
                 >
                   <svg
@@ -248,16 +243,35 @@ const CommentItem = ({
           )}
         </div>
 
-        {/* Content — view mode */}
+        {/* Content — view mode: soft card */}
         {!editing && (
-          <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words leading-relaxed">
-            {comment.content}
-          </p>
+          <div
+            className="
+              rounded-xl px-3.5 py-2.5
+              bg-gray-50 dark:bg-gray-800/40
+              border border-gray-100 dark:border-gray-800/60
+            "
+          >
+            <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words leading-relaxed">
+              {comment.content}
+            </p>
+            {error && (
+              <p className="text-xs text-red-600 dark:text-red-400 mt-2">
+                {error}
+              </p>
+            )}
+          </div>
         )}
 
-        {/* Content — edit mode */}
+        {/* Content — edit mode: textarea */}
         {editing && (
-          <div className="space-y-2">
+          <div
+            className="
+              rounded-xl p-3
+              bg-white dark:bg-gray-800
+              border border-indigo-300 dark:border-indigo-800
+            "
+          >
             <textarea
               ref={textareaRef}
               value={draft}
@@ -267,9 +281,9 @@ const CommentItem = ({
               disabled={saving}
               rows={2}
               maxLength={MAX_LENGTH}
-              className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none disabled:opacity-60"
+              className="w-full bg-transparent text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none resize-none disabled:opacity-60"
             />
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center justify-between gap-2 mt-2">
               <p className="text-[11px] text-gray-500 dark:text-gray-400">
                 Ctrl+Enter to save · Esc to cancel
               </p>
@@ -278,7 +292,7 @@ const CommentItem = ({
                   type="button"
                   onClick={handleCancelEdit}
                   disabled={saving}
-                  className="px-2.5 py-1 rounded-md text-xs font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50 transition-colors"
+                  className="px-2.5 py-1 rounded-md text-xs font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 transition-colors"
                 >
                   Cancel
                 </button>
@@ -292,14 +306,12 @@ const CommentItem = ({
                 </button>
               </div>
             </div>
+            {error && (
+              <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                {error}
+              </p>
+            )}
           </div>
-        )}
-
-        {/* Local error (edit/delete) */}
-        {error && (
-          <p className="text-xs text-red-600 dark:text-red-400 mt-1">
-            {error}
-          </p>
         )}
       </div>
     </div>
@@ -307,8 +319,7 @@ const CommentItem = ({
 };
 
 // =============================================================
-// formatRelative - "just now", "5m ago", "2h ago", "Yesterday",
-// or a short date for older comments.
+// formatRelative
 // =============================================================
 function formatRelative(isoString) {
   const then = new Date(isoString).getTime();
@@ -328,7 +339,6 @@ function formatRelative(isoString) {
   if (diffDay === 1) return 'Yesterday';
   if (diffDay < 7) return `${diffDay}d ago`;
 
-  // Older: return a short date
   return new Date(isoString).toLocaleDateString(undefined, {
     month: 'short',
     day: 'numeric',

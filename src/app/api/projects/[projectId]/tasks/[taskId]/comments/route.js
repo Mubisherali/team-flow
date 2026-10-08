@@ -13,14 +13,14 @@
 //   Oldest first — the thread reads top-to-bottom.
 // -------------------------------------------------------------
 
-import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
+import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
 
-import { authOptions } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
-import { getMemberRole, canViewWorkspace } from '@/lib/permissions';
-import { commentContentSchema } from '@/lib/validators/comment';
-
+import { authOptions } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { getMemberRole, canViewWorkspace } from "@/lib/permissions";
+import { commentContentSchema } from "@/lib/validators/comment";
+import { notifyTaskEvent } from "@/lib/notifications";
 // -------------------------------------------------------------
 // Shared helper — verify task access for the caller.
 // Returns { task, role, isPrivileged } or { error }.
@@ -34,10 +34,7 @@ async function loadTaskAccess(projectId, taskId, userId) {
 
   if (!project) {
     return {
-      error: NextResponse.json(
-        { error: 'Task not found' },
-        { status: 404 }
-      ),
+      error: NextResponse.json({ error: "Task not found" }, { status: 404 }),
     };
   }
 
@@ -45,14 +42,11 @@ async function loadTaskAccess(projectId, taskId, userId) {
   const role = await getMemberRole(userId, project.workspaceId);
   if (!canViewWorkspace(role)) {
     return {
-      error: NextResponse.json(
-        { error: 'Task not found' },
-        { status: 404 }
-      ),
+      error: NextResponse.json({ error: "Task not found" }, { status: 404 }),
     };
   }
 
-  const isPrivileged = role === 'OWNER' || role === 'MANAGER';
+  const isPrivileged = role === "OWNER" || role === "MANAGER";
 
   // Non-privileged users must be a project member
   if (!isPrivileged) {
@@ -61,30 +55,31 @@ async function loadTaskAccess(projectId, taskId, userId) {
     });
     if (!pm) {
       return {
-        error: NextResponse.json(
-          { error: 'Task not found' },
-          { status: 404 }
-        ),
+        error: NextResponse.json({ error: "Task not found" }, { status: 404 }),
       };
     }
   }
 
   // Task must exist and belong to the project
+  // Task must exist and belong to the project
   const task = await prisma.task.findUnique({
     where: { id: taskId },
-    select: { id: true, projectId: true },
+    select: {
+      id: true,
+      projectId: true,
+      title: true,
+      assigneeId: true,
+      createdById: true,
+    },
   });
 
   if (!task || task.projectId !== projectId) {
     return {
-      error: NextResponse.json(
-        { error: 'Task not found' },
-        { status: 404 }
-      ),
+      error: NextResponse.json({ error: "Task not found" }, { status: 404 }),
     };
   }
 
-  return { task, role, isPrivileged };
+  return { project, task, role, isPrivileged };
 }
 
 // =============================================================
@@ -94,7 +89,7 @@ export async function GET(request, { params }) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const { projectId, taskId } = await params;
@@ -109,7 +104,7 @@ export async function GET(request, { params }) {
           select: { id: true, name: true, email: true, avatarUrl: true },
         },
       },
-      orderBy: { createdAt: 'asc' },
+      orderBy: { createdAt: "asc" },
     });
 
     const shaped = comments.map((c) => ({
@@ -133,10 +128,10 @@ export async function GET(request, { params }) {
 
     return NextResponse.json({ comments: shaped });
   } catch (error) {
-    console.error('[COMMENTS_GET_ERROR]', error);
+    console.error("[COMMENTS_GET_ERROR]", error);
     return NextResponse.json(
-      { error: 'Failed to fetch comments' },
-      { status: 500 }
+      { error: "Failed to fetch comments" },
+      { status: 500 },
     );
   }
 }
@@ -148,7 +143,7 @@ export async function POST(request, { params }) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const { projectId, taskId } = await params;
@@ -163,7 +158,7 @@ export async function POST(request, { params }) {
     if (!parsed.success) {
       return NextResponse.json(
         { error: parsed.error.issues[0].message },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -180,10 +175,23 @@ export async function POST(request, { params }) {
         },
       },
     });
-
+    const actorName = session.user.name || session.user.email || "Someone";
+    await notifyTaskEvent({
+      task: {
+        id: access.task.id,
+        projectId: access.task.projectId,
+        title: access.task.title,
+        assigneeId: access.task.assigneeId,
+        createdById: access.task.createdById,
+      },
+      workspaceId: access.project.workspaceId,
+      actorId: session.user.id,
+      actorName,
+      event: "commented",
+    });
     return NextResponse.json(
       {
-        message: 'Comment posted',
+        message: "Comment posted",
         comment: {
           id: comment.id,
           taskId: comment.taskId,
@@ -200,13 +208,13 @@ export async function POST(request, { params }) {
           isEdited: false,
         },
       },
-      { status: 201 }
+      { status: 201 },
     );
   } catch (error) {
-    console.error('[COMMENTS_POST_ERROR]', error);
+    console.error("[COMMENTS_POST_ERROR]", error);
     return NextResponse.json(
-      { error: 'Failed to post comment' },
-      { status: 500 }
+      { error: "Failed to post comment" },
+      { status: 500 },
     );
   }
 }

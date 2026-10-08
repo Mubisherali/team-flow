@@ -2,20 +2,16 @@
 // CommentList - Comments section for a task
 // -------------------------------------------------------------
 //
-// PROPS:
-//   projectId       : string
-//   taskId          : string
-//   currentUserId   : string
-//   currentUserRole : 'OWNER' | 'MANAGER' | 'MEMBER'
+// VISUAL:
+//   Reads like an inbox — a title bar with count, comments
+//   stacked with dividers, and a composer at the bottom.
 //
-// DATA:
-//   Comments are loaded on mount, then kept in local state.
-//   Add/edit/delete update local state after the API responds.
-//   The parent modal doesn't need to know about comments at all.
-//
-// AUTO-SCROLL:
-//   When the list first loads, scroll to the bottom (newest).
-//   After posting a new comment, also scroll to the bottom.
+// BEHAVIOR:
+//   - Fetches comments on mount and when taskId changes
+//   - Add/edit/delete update local state after the API responds
+//   - Auto-scrolls to the newest comment on mount + after post
+//   - Renders <CommentItem> for each comment
+//   - Renders <CommentForm> at the bottom
 // -------------------------------------------------------------
 
 'use client';
@@ -35,11 +31,10 @@ const CommentList = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const scrollRef = useRef(null);
   const bottomRef = useRef(null);
 
   // -----------------------------------------------------------
-  // FETCH on mount / when taskId changes
+  // FETCH
   // -----------------------------------------------------------
   useEffect(() => {
     let cancelled = false;
@@ -77,13 +72,15 @@ const CommentList = ({
   }, [projectId, taskId]);
 
   // -----------------------------------------------------------
-  // AUTO-SCROLL to the latest comment when the list loads
+  // AUTO-SCROLL on load
   // -----------------------------------------------------------
   useEffect(() => {
     if (!loading && bottomRef.current) {
-      // rAF ensures the DOM has settled before scrolling.
       requestAnimationFrame(() => {
-        bottomRef.current?.scrollIntoView({ behavior: 'auto', block: 'nearest' });
+        bottomRef.current?.scrollIntoView({
+          behavior: 'auto',
+          block: 'nearest',
+        });
       });
     }
   }, [loading]);
@@ -109,9 +106,11 @@ const CommentList = ({
 
       setComments((prev) => [...prev, data.comment]);
 
-      // Scroll to the new comment
       requestAnimationFrame(() => {
-        bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        bottomRef.current?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'nearest',
+        });
       });
     },
     [projectId, taskId]
@@ -166,72 +165,127 @@ const CommentList = ({
   // -----------------------------------------------------------
   // RENDER
   // -----------------------------------------------------------
+  const count = comments.length;
+  const hasComments = count > 0;
+
   return (
-    <section>
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-          Comments
-          {!loading && comments.length > 0 && (
-            <span className="ml-2 text-gray-400 dark:text-gray-500 font-normal">
-              {comments.length}
+    <section className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-hidden">
+      {/* ─── Section header ─── */}
+      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-800">
+        <div className="flex items-center gap-2.5">
+          <div className="w-7 h-7 rounded-lg bg-indigo-50 dark:bg-indigo-950 flex items-center justify-center">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              className="text-indigo-600 dark:text-indigo-400"
+            >
+              <path
+                d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </div>
+
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
+            Discussion
+          </h3>
+
+          {!loading && hasComments && (
+            <span className="text-xs font-medium px-1.5 py-0.5 rounded-md bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
+              {count}
             </span>
           )}
-        </h3>
+        </div>
       </div>
 
-      {/* Error */}
+      {/* ─── Error ─── */}
       {error && (
-        <div className="mb-3 p-3 rounded-lg bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-900">
+        <div className="m-6 p-3 rounded-lg bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-900">
           <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
         </div>
       )}
 
-      {/* Body */}
+      {/* ─── Body ─── */}
       {loading ? (
         <LoadingComments />
       ) : (
         <>
-          {/* Thread */}
-          <div ref={scrollRef} className="space-y-4 mb-4">
-            {comments.length === 0 ? (
-              <EmptyComments />
-            ) : (
-              comments.map((c) => (
-                <CommentItem
-                  key={c.id}
-                  comment={c}
-                  currentUserId={currentUserId}
-                  currentUserRole={currentUserRole}
-                  onEdit={handleEdit}
-                  onDelete={handleDelete}
-                />
-              ))
-            )}
-            <div ref={bottomRef} />
-          </div>
+          {/* Comments */}
+          {hasComments ? (
+            <div className="divide-y divide-gray-100 dark:divide-gray-800/60">
+              {comments.map((c) => (
+                <div key={c.id} className="px-6 py-5">
+                  <CommentItem
+                    comment={c}
+                    currentUserId={currentUserId}
+                    currentUserRole={currentUserRole}
+                    onEdit={handleEdit}
+                    onDelete={handleDelete}
+                  />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyComments />
+          )}
+
+          {/* Divider before composer */}
+          <div className="border-t border-gray-200 dark:border-gray-800" />
 
           {/* Composer */}
-          <CommentForm onSubmit={handleAdd} />
+          <div className="p-6 bg-gray-50/50 dark:bg-gray-900/50">
+            <CommentForm onSubmit={handleAdd} />
+          </div>
         </>
       )}
+
+      {/* Invisible scroll anchor */}
+      <div ref={bottomRef} />
     </section>
   );
 };
 
 // =============================================================
-// Sub-components
+// LoadingComments
 // =============================================================
 const LoadingComments = () => (
-  <div className="flex items-center justify-center py-8">
+  <div className="flex items-center justify-center py-12">
     <span className="w-5 h-5 border-2 border-gray-300 dark:border-gray-700 border-t-gray-500 dark:border-t-gray-400 rounded-full animate-spin" />
   </div>
 );
 
+// =============================================================
+// EmptyComments
+// =============================================================
 const EmptyComments = () => (
-  <div className="py-8 text-center">
-    <p className="text-sm text-gray-500 dark:text-gray-400 italic">
-      No comments yet. Start the discussion below.
+  <div className="py-12 text-center">
+    <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+      <svg
+        width="20"
+        height="20"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        className="text-gray-400 dark:text-gray-500"
+      >
+        <path
+          d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </div>
+    <p className="text-sm font-medium text-gray-900 dark:text-white mb-1">
+      No comments yet
+    </p>
+    <p className="text-xs text-gray-500 dark:text-gray-400">
+      Start the discussion below.
     </p>
   </div>
 );

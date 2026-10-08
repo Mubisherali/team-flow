@@ -23,8 +23,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getMemberRole, canViewWorkspace } from '@/lib/permissions';
-import TaskPageClient from '@/components/task/TaskPageClient';
-
+import TaskPageView from '@/components/task/TaskPageView';
 export default async function TaskPage({ params }) {
   // ─── Auth ───
   const session = await getServerSession(authOptions);
@@ -146,15 +145,15 @@ export default async function TaskPage({ params }) {
     task.createdById === session.user.id;
 
   // ─── Render ───
-  return (
-    <TaskPageClient
-      task={shapedTask}
-      project={{ id: project.id, name: project.name }}
-      workspace={{ id: workspace.id, name: workspace.name, slug: workspace.slug }}
-      projectMembers={shapedMembers}
-      canEdit={canEdit}
-      currentUserId={session.user.id}
-      currentUserRole={role}
-    />
-  );
+ return (
+  <TaskPageView
+    task={shapedTask}
+    project={{ id: project.id, name: project.name }}
+    workspace={{ id: workspace.id, name: workspace.name, slug: workspace.slug }}
+    projectMembers={shapedMembers}
+    canEdit={canEdit}
+    currentUserId={session.user.id}
+    currentUserRole={role}
+  />
+);
 }

@@ -34,6 +34,8 @@ import {
   canMoveTaskTo,
 } from '@/lib/permissions';
 import { updateTaskSchema } from '@/lib/validators/task';
+import { notifyTaskEvent } from '@/lib/notifications';
+import { statusMeta } from '@/lib/task-constants';
 
 // -------------------------------------------------------------
 // Load project + task + caller's role in one go.
@@ -297,14 +299,19 @@ export async function PATCH(request, { params }) {
       data.labels = labels;
     }
 
-    if (Object.keys(data).length === 0) {
+       if (Object.keys(data).length === 0) {
       return NextResponse.json(
         { error: 'No fields to update' },
         { status: 400 }
       );
     }
 
-    const updated = await prisma.task.update({
+    // ─── Capture original values for notification diffing ───
+    // We need to know what changed, so we snapshot before update.
+    const originalAssigneeId = ctx.task.assigneeId || null;
+    const originalStatus = ctx.task.status;
+
+       const updated = await prisma.task.update({
       where: { id: taskId },
       data,
       include: {
@@ -317,6 +324,36 @@ export async function PATCH(request, { params }) {
         _count: { select: { comments: true } },
       },
     });
+
+    // ─── Fire notifications for what changed ───
+    const actorName = session.user.name || session.user.email || 'Someone';
+    const notifyBase = {
+      task: {
+        id: updated.id,
+        projectId: updated.projectId,
+        title: updated.title,
+        assigneeId: updated.assigneeId,
+        createdById: updated.createdById,
+      },
+      workspaceId: ctx.project.workspaceId,
+      actorId: session.user.id,
+      actorName,
+    };
+
+    // Trigger A: assignee changed → notify the new assignee
+    const newAssigneeId = updated.assigneeId || null;
+    if (newAssigneeId && newAssigneeId !== originalAssigneeId) {
+      await notifyTaskEvent({ ...notifyBase, event: 'reassigned' });
+    }
+
+    // Trigger B: status changed → notify assignee + creator
+    if (updated.status !== originalStatus) {
+      await notifyTaskEvent({
+        ...notifyBase,
+        event: 'status_changed',
+        extra: { statusLabel: statusMeta(updated.status).label },
+      });
+    }
 
     return NextResponse.json({
       message: 'Task updated',

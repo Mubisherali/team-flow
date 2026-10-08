@@ -1,56 +1,12 @@
 // -------------------------------------------------------------
-// TaskFields - Shared field editor for a task
+// TaskFields - Auto-save field editor (used by the modal)
 // -------------------------------------------------------------
-//
-// USED BY:
-//   - TaskDetailModal (compact layout)
-//   - TaskPageClient  (spacious layout)
-//
-// RENDERS:
-//   - Error banner (top)
-//   - Title
-//   - Description
-//   - Status + Priority (2-col)
-//   - Assignee (rich) + Due date (2-col)
-//   - Labels
-//   - Meta footer (created by / last updated)
-//   - Comments (CommentList)
-//
-// PROPS:
-//   task            : the task object
-//   projectId       : string
-//   projectMembers  : array
-//   canEdit         : boolean
-//   currentUserId   : string
-//   currentUserRole : 'OWNER' | 'MANAGER' | 'MEMBER'
-//   onUpdated       : (task) => void  (called on every successful PATCH)
-//   saveState       : 'idle' | 'saving' | 'saved' | 'error'
-//   saveError       : string
-//   setSaveState    : (state) => void
-//   setSaveError    : (msg) => void
-//   titleRef        : ref for autofocus on mount (optional)
-//
-// WHY STATE IS PASSED IN:
-//   The modal shows a "Saving..." indicator in its header. The
-//   page shows it inline. Both need access to saveState/saveError,
-//   so this component receives them as props rather than
-//   owning them. Parents control the save UX; this component
-//   just does the actual work.
-// -------------------------------------------------------------
-
 'use client';
 
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
 
-import { updateTaskSchema } from '@/lib/validators/task';
-import {
-  TASK_STATUSES,
-  TASK_PRIORITIES,
-  statusMeta,
-  toDateTimeLocal,
-  fromDateTimeLocal,
-} from '@/lib/task-constants';
+import { useTaskEditor } from '@/hooks/useTaskEditor';
+import { TASK_PRIORITIES } from '@/lib/task-constants';
 import CommentList from './CommentList';
 
 const TaskFields = ({
@@ -61,192 +17,82 @@ const TaskFields = ({
   currentUserId,
   currentUserRole,
   onUpdated,
-  saveState,
   saveError,
   setSaveState,
   setSaveError,
   titleRef,
 }) => {
-  // ─── Local editable state ───
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [status, setStatus] = useState('TODO');
-  const [priority, setPriority] = useState('MEDIUM');
-  const [assigneeId, setAssigneeId] = useState('');
-  const [dueDate, setDueDate] = useState('');
-  const [labels, setLabels] = useState([]);
-
-  const [labelInput, setLabelInput] = useState('');
-
-  const router = useRouter();
   const internalTitleRef = useRef(null);
-
-  // Prefer the passed-in ref (modal autofocuses on open) but
-  // fall back to our own.
   const effectiveTitleRef = titleRef || internalTitleRef;
 
-  const isPrivileged =
-    currentUserRole === 'OWNER' || currentUserRole === 'MANAGER';
+  const editor = useTaskEditor({
+    task,
+    projectId,
+    projectMembers,
+    canEdit,
+    currentUserId,
+    currentUserRole,
+    onUpdated,
+  });
 
-  // ─── Sync from task whenever the id changes ───
+  // Mirror the hook's save state to the modal's header.
+  // Using useEffect (not useMemo) because this is a side effect.
   useEffect(() => {
-    if (!task) return;
-    setTitle(task.title || '');
-    setDescription(task.description || '');
-    setStatus(task.status || 'TODO');
-    setPriority(task.priority || 'MEDIUM');
-    setAssigneeId(task.assigneeId || '');
-    setDueDate(task.dueDate ? toDateTimeLocal(task.dueDate) : '');
-    setLabels(task.labels || []);
-    setLabelInput('');
-  }, [task?.id]);
+    setSaveState?.(editor.saveState);
+  }, [editor.saveState, setSaveState]);
 
-  // -----------------------------------------------------------
-  // WORKFLOW
-  // -----------------------------------------------------------
-  const canMoveToStatus = (targetStatus) => {
-    if (!task) return false;
-    if (targetStatus === task.status) return true;
-    if (!canEdit) return false;
-    if (isPrivileged) return true;
-
-    const isMyTask =
-      task.assigneeId === currentUserId ||
-      task.createdById === currentUserId;
-    if (!isMyTask) return false;
-    if (targetStatus === 'DONE') return false;
-    return true;
-  };
-
-  const availableStatuses = TASK_STATUSES.filter((s) =>
-    canMoveToStatus(s.value)
-  );
-  const canMoveStatus = availableStatuses.length > 1;
+  useEffect(() => {
+    setSaveError?.(editor.saveError);
+  }, [editor.saveError, setSaveError]);
 
   const assignableMembers = useMemo(() => {
-    if (isPrivileged) return projectMembers;
+    if (!projectMembers) return [];
+    if (editor.isPrivileged) return projectMembers;
     return projectMembers.filter((m) => m.userId === currentUserId);
-  }, [isPrivileged, projectMembers, currentUserId]);
-
-  const currentStatusMeta = TASK_STATUSES.find((s) => s.value === status);
-
-  // -----------------------------------------------------------
-  // PATCH
-  // -----------------------------------------------------------
-  const patchTask = async (partial) => {
-    if (!task) return;
-
-    setSaveState?.('saving');
-    setSaveError?.('');
-
-    try {
-      const res = await fetch(
-        `/api/projects/${projectId}/tasks/${task.id}`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(partial),
-        }
-      );
-      const data = await res.json();
-
-      if (!res.ok) {
-        setSaveState?.('error');
-        setSaveError?.(data.error || 'Failed to save');
-        return;
-      }
-
-      setSaveState?.('saved');
-      onUpdated?.(data.task);
-      router.refresh();
-    } catch (err) {
-      console.error('[TASK_PATCH]', err);
-      setSaveState?.('error');
-      setSaveError?.('Network error. Please try again.');
-    }
-  };
-
-  // -----------------------------------------------------------
-  // FIELD HANDLERS
-  // -----------------------------------------------------------
-  const handleTitleBlur = () => {
-    const trimmed = title.trim();
-    if (!task || trimmed === (task.title || '').trim()) return;
-
-    const parsed = updateTaskSchema.safeParse({ title: trimmed });
-    if (!parsed.success) {
-      setSaveError?.(parsed.error.issues[0].message);
-      setSaveState?.('error');
-      return;
-    }
-    patchTask({ title: trimmed });
-  };
-
-  const handleDescriptionBlur = () => {
-    const trimmed = description.trim();
-    if (!task || trimmed === (task.description || '').trim()) return;
-    patchTask({ description: trimmed });
-  };
-
-  const handleSelectChange = (field, value) => {
-    if (field === 'status') setStatus(value);
-    if (field === 'priority') setPriority(value);
-    if (field === 'assigneeId') setAssigneeId(value);
-    patchTask({ [field]: value });
-  };
-
-  const handleDueDateChange = (e) => {
-    const localVal = e.target.value;
-    setDueDate(localVal);
-    const iso = localVal ? fromDateTimeLocal(localVal) : null;
-    patchTask({ dueDate: iso });
-  };
-
-  const handleAddLabel = () => {
-    const raw = labelInput.trim().toLowerCase();
-    if (!raw) return;
-    if (labels.includes(raw)) {
-      setLabelInput('');
-      return;
-    }
-    if (labels.length >= 8) {
-      setSaveError?.('A task can have at most 8 labels');
-      setSaveState?.('error');
-      return;
-    }
-    if (!/^[a-z0-9 _-]+$/.test(raw)) {
-      setSaveError?.(
-        'Label can only contain letters, numbers, spaces, hyphens, underscores'
-      );
-      setSaveState?.('error');
-      return;
-    }
-    const next = [...labels, raw];
-    setLabels(next);
-    setLabelInput('');
-    patchTask({ labels: next });
-  };
-
-  const handleRemoveLabel = (label) => {
-    const next = labels.filter((l) => l !== label);
-    setLabels(next);
-    patchTask({ labels: next });
-  };
-
-  const handleLabelKeyDown = (e) => {
-    if (e.key === 'Enter' || e.key === ',') {
-      e.preventDefault();
-      handleAddLabel();
-    } else if (e.key === 'Backspace' && !labelInput && labels.length > 0) {
-      handleRemoveLabel(labels[labels.length - 1]);
-    }
-  };
+  }, [editor.isPrivileged, projectMembers, currentUserId]);
 
   if (!task) return null;
 
-  // -----------------------------------------------------------
-  // RENDER
-  // -----------------------------------------------------------
+  const {
+    title,
+    setTitle,
+    description,
+    setDescription,
+    status,
+    priority,
+    assigneeId,
+    dueDate,
+    labels,
+    labelInput,
+    setLabelInput,
+    handleTitleBlur,
+    handleDescriptionBlur,
+    handleSelectChange,
+    handleDueDateChange,
+    handleAddLabel,
+    handleRemoveLabel,
+    canMoveToStatus,
+    availableStatuses,
+    canMoveStatus,
+    currentStatusMeta,
+    isPrivileged,
+  } = editor;
+
+  // Auto-save variants of label handlers
+  const handleAddLabelAndSave = () => {
+    const next = handleAddLabel();
+    if (next && next.length !== labels.length) {
+      handleSelectChange('labels', next);
+    }
+  };
+
+  const handleRemoveLabelAndSave = (label) => {
+    const next = handleRemoveLabel(label);
+    if (next) {
+      handleSelectChange('labels', next);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Error banner */}
@@ -398,7 +244,7 @@ const TaskFields = ({
                 {canEdit && (
                   <button
                     type="button"
-                    onClick={() => handleRemoveLabel(label)}
+                    onClick={() => handleRemoveLabelAndSave(label)}
                     className="text-gray-400 hover:text-gray-700 dark:hover:text-white"
                   >
                     <svg
@@ -423,8 +269,19 @@ const TaskFields = ({
             type="text"
             value={labelInput}
             onChange={(e) => setLabelInput(e.target.value)}
-            onKeyDown={handleLabelKeyDown}
-            onBlur={handleAddLabel}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ',') {
+                e.preventDefault();
+                handleAddLabelAndSave();
+              } else if (
+                e.key === 'Backspace' &&
+                !labelInput &&
+                labels.length > 0
+              ) {
+                handleRemoveLabelAndSave(labels[labels.length - 1]);
+              }
+            }}
+            onBlur={handleAddLabelAndSave}
             placeholder="Type and press Enter to add"
             maxLength={24}
             className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
@@ -469,13 +326,11 @@ const TaskFields = ({
 };
 
 // =============================================================
-// AssigneeSelect - rich dropdown with avatars + names + emails
+// AssigneeSelect
 // =============================================================
 const AssigneeSelect = ({ value, members, currentUserId, disabled, onChange }) => {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
-
-  const selected = members.find((m) => m.userId === value);
 
   useEffect(() => {
     if (!open) return;
@@ -496,6 +351,8 @@ const AssigneeSelect = ({ value, members, currentUserId, disabled, onChange }) =
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
   }, [open]);
+
+  const selected = members.find((m) => m.userId === value);
 
   const handleSelect = (userId) => {
     onChange(userId);

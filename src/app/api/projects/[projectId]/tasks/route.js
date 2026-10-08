@@ -26,6 +26,7 @@ import {
   canAssignTo,
 } from '@/lib/permissions';
 import { createTaskSchema } from '@/lib/validators/task';
+import { notifyTaskEvent } from '@/lib/notifications';
 
 // -------------------------------------------------------------
 // Shared helper — load project + verify caller access
@@ -252,6 +253,23 @@ export async function POST(request, { params }) {
         _count: { select: { comments: true } },
       },
     });
+
+      if (finalAssigneeId && finalAssigneeId !== session.user.id) {
+      const actorName = session.user.name || session.user.email || 'Someone';
+      await notifyTaskEvent({
+        task: {
+          id: task.id,
+          projectId: task.projectId,
+          title: task.title,
+          assigneeId: task.assigneeId,
+          createdById: task.createdById,
+        },
+        workspaceId: access.project.workspaceId,
+        actorId: session.user.id,
+        actorName,
+        event: 'assigned',
+      });
+    }
 
     return NextResponse.json(
       {
