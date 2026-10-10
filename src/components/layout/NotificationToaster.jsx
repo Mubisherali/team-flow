@@ -33,6 +33,11 @@ const NotificationToaster = () => {
 
     const accent = getAccentForType(type);
 
+    const handleOpen = () => {
+      if (!isRead) markRead(id);
+      if (link) router.push(link);
+    };
+
     toast.custom(
       (t) => (
         <div
@@ -45,22 +50,33 @@ const NotificationToaster = () => {
             shadow-2xl shadow-black/25 dark:shadow-black/60
             overflow-hidden
             transition-all duration-300 ease-out
-            ${t.visible
-              ? 'opacity-100 translate-y-0 scale-100'
-              : 'opacity-0 -translate-y-4 scale-[0.98]'}
+            ${
+              t.visible
+                ? 'opacity-100 translate-y-0 scale-100'
+                : 'opacity-0 -translate-y-4 scale-[0.98]'
+            }
           `}
         >
           {/* Top accent bar */}
           <div className={`h-1 w-full ${accent.bar}`} />
 
-          <button
-            type="button"
+          {/* Body — clickable div, not a button, so the inner
+              close button is valid HTML. */}
+          <div
+            role="button"
+            tabIndex={0}
             onClick={() => {
-              if (!isRead) markRead(id);
-              if (link) router.push(link);
+              handleOpen();
               toast.dismiss(t.id);
             }}
-            className="w-full flex items-start gap-3.5 p-4 text-left hover:bg-gray-50 dark:hover:bg-white/[0.03] transition-colors"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                handleOpen();
+                toast.dismiss(t.id);
+              }
+            }}
+            className="w-full flex items-start gap-3.5 p-4 text-left hover:bg-gray-50 dark:hover:bg-white/[0.03] transition-colors cursor-pointer"
           >
             {/* Icon */}
             <span
@@ -112,7 +128,7 @@ const NotificationToaster = () => {
               </span>
             </span>
 
-            {/* Close button */}
+            {/* Close button — now valid (inside a div, not a button) */}
             <button
               type="button"
               onClick={(e) => {
@@ -133,7 +149,7 @@ const NotificationToaster = () => {
                 <path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" />
               </svg>
             </button>
-          </button>
+          </div>
         </div>
       ),
       {

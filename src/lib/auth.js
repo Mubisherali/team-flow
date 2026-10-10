@@ -174,21 +174,41 @@ export const authOptions = {
     },
 
     // -------------------------------------------------------
-    // jwt()
+    // jwt() - Build the token
     // -------------------------------------------------------
-    async jwt({ token, user }) {
+    // Runs:
+    //   1. On initial sign-in (user is provided)
+    //   2. On every subsequent request (only token is provided)
+    //   3. When the client calls update() — trigger === 'update'
+    async jwt({ token, user, trigger, session }) {
+      // ─── Initial sign-in: seed the token ───
       if (user) {
         token.id = user.id;
+        token.name = user.name;
+        token.email = user.email;
+        token.picture = user.image;
       }
+
+      // ─── Client called update({ name, image }) from useSession ───
+      // Fired after the user edits their profile. Merge the
+      // new values into the token.
+      if (trigger === 'update' && session) {
+        if (session.name !== undefined) token.name = session.name;
+        if (session.image !== undefined) token.picture = session.image;
+      }
+
       return token;
     },
 
     // -------------------------------------------------------
-    // session()
+    // session() - Shape the client-visible session object
     // -------------------------------------------------------
     async session({ session, token }) {
       if (token && session.user) {
         session.user.id = token.id;
+        session.user.name = token.name;
+        session.user.email = token.email;
+        session.user.image = token.picture;
       }
       return session;
     },

@@ -25,27 +25,28 @@
 //   Orphaned Cloudinary files are cheap (25 GB free).
 // -------------------------------------------------------------
 
-'use client';
+"use client";
 
-import { useState, useRef } from 'react';
-import { useRouter } from 'next/navigation';
-
-import { updateProfileSchema } from '@/lib/validators/user';
-import { uploadImage, UPLOAD_RULES } from '@/lib/upload';
+import { useState, useRef } from "react";
+import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
+import { updateProfileSchema } from "@/lib/validators/user";
+import { uploadImage, UPLOAD_RULES } from "@/lib/upload";
 
 const ProfileForm = ({ initialName, initialAvatarUrl, email }) => {
   const [name, setName] = useState(initialName);
   const [avatarUrl, setAvatarUrl] = useState(initialAvatarUrl);
 
   const [errors, setErrors] = useState({});
-  const [status, setStatus] = useState({ type: '', message: '' });
+  const [status, setStatus] = useState({ type: "", message: "" });
   const [saving, setSaving] = useState(false);
 
   const [uploading, setUploading] = useState(false);
-  const [uploadError, setUploadError] = useState('');
+  const [uploadError, setUploadError] = useState("");
 
-  const fileInputRef = useRef(null);
+   const fileInputRef = useRef(null);
   const router = useRouter();
+  const { update } = useSession();
 
   // Unsaved changes?
   const isDirty = name !== initialName || avatarUrl !== initialAvatarUrl;
@@ -56,31 +57,31 @@ const ProfileForm = ({ initialName, initialAvatarUrl, email }) => {
   const handleFileSelect = async (e) => {
     const file = e.target.files?.[0];
     // Reset the input so the same file can be selected again later.
-    e.target.value = '';
+    e.target.value = "";
 
     if (!file) return;
 
-    setUploadError('');
+    setUploadError("");
     setUploading(true);
-    setStatus({ type: '', message: '' });
+    setStatus({ type: "", message: "" });
 
     try {
-      const result = await uploadImage(file, { folder: 'teamflow/avatars' });
+      const result = await uploadImage(file, { folder: "teamflow/avatars" });
       setAvatarUrl(result.secureUrl);
       // Don't auto-save — the user can review and click Save.
     } catch (err) {
-      console.error('[AVATAR_UPLOAD]', err);
-      setUploadError(err.message || 'Upload failed. Please try again.');
+      console.error("[AVATAR_UPLOAD]", err);
+      setUploadError(err.message || "Upload failed. Please try again.");
     } finally {
       setUploading(false);
     }
   };
 
   const handleRemoveAvatar = () => {
-    if (!confirm('Remove your profile picture?')) return;
-    setAvatarUrl('');
-    setUploadError('');
-    setStatus({ type: '', message: '' });
+    if (!confirm("Remove your profile picture?")) return;
+    setAvatarUrl("");
+    setUploadError("");
+    setStatus({ type: "", message: "" });
   };
 
   // -----------------------------------------------------------
@@ -89,7 +90,7 @@ const ProfileForm = ({ initialName, initialAvatarUrl, email }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErrors({});
-    setStatus({ type: '', message: '' });
+    setStatus({ type: "", message: "" });
     setSaving(true);
 
     // Client-side validation
@@ -106,26 +107,36 @@ const ProfileForm = ({ initialName, initialAvatarUrl, email }) => {
     }
 
     try {
-      const res = await fetch('/api/users/me', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("/api/users/me", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(parsed.data),
       });
       const data = await res.json();
 
       if (!res.ok) {
-        setStatus({ type: 'error', message: data.error || 'Failed to save' });
+        setStatus({ type: "error", message: data.error || "Failed to save" });
         setSaving(false);
         return;
       }
 
-      setStatus({ type: 'success', message: 'Profile updated' });
+      setStatus({ type: "success", message: "Profile updated" });
       setSaving(false);
-      // Refresh so the sidebar/user menu show the new name/avatar.
+
+      // Refresh the JWT so the new name/image are available
+      // everywhere the session is read (sidebar, user menu, etc.).
+      if (typeof update === "function") {
+        await update({
+          name: parsed.data.name,
+          image: parsed.data.avatarUrl,
+        });
+      }
+
+      // Refresh server components (layout re-reads the session).
       router.refresh();
     } catch (err) {
-      console.error('[PROFILE_SAVE]', err);
-      setStatus({ type: 'error', message: 'Network error. Please try again.' });
+      console.error("[PROFILE_SAVE]", err);
+      setStatus({ type: "error", message: "Network error. Please try again." });
       setSaving(false);
     }
   };
@@ -133,12 +144,12 @@ const ProfileForm = ({ initialName, initialAvatarUrl, email }) => {
   // -----------------------------------------------------------
   // RENDER
   // -----------------------------------------------------------
-  const initials = (name || email || '?')
+  const initials = (name || email || "?")
     .trim()
     .split(/\s+/)
     .map((s) => s[0])
     .slice(0, 2)
-    .join('')
+    .join("")
     .toUpperCase();
 
   return (
@@ -147,9 +158,9 @@ const ProfileForm = ({ initialName, initialAvatarUrl, email }) => {
       {status.message && (
         <div
           className={`p-3 rounded-lg border text-sm ${
-            status.type === 'success'
-              ? 'bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-900 text-green-700 dark:text-green-300'
-              : 'bg-red-50 dark:bg-red-950 border-red-200 dark:border-red-900 text-red-700 dark:text-red-300'
+            status.type === "success"
+              ? "bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-900 text-green-700 dark:text-green-300"
+              : "bg-red-50 dark:bg-red-950 border-red-200 dark:border-red-900 text-red-700 dark:text-red-300"
           }`}
         >
           {status.message}
@@ -208,7 +219,7 @@ const ProfileForm = ({ initialName, initialAvatarUrl, email }) => {
                     strokeLinejoin="round"
                   />
                 </svg>
-                {uploading ? 'Uploading...' : 'Upload new photo'}
+                {uploading ? "Uploading..." : "Upload new photo"}
               </button>
 
               {avatarUrl && (
@@ -236,7 +247,7 @@ const ProfileForm = ({ initialName, initialAvatarUrl, email }) => {
           <input
             ref={fileInputRef}
             type="file"
-            accept={UPLOAD_RULES.allowedTypes.join(',')}
+            accept={UPLOAD_RULES.allowedTypes.join(",")}
             onChange={handleFileSelect}
             className="hidden"
           />
@@ -258,7 +269,7 @@ const ProfileForm = ({ initialName, initialAvatarUrl, email }) => {
           onChange={(e) => {
             setName(e.target.value);
             if (errors.name) setErrors((p) => ({ ...p, name: undefined }));
-            if (status.message) setStatus({ type: '', message: '' });
+            if (status.message) setStatus({ type: "", message: "" });
           }}
           maxLength={50}
           className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -300,7 +311,7 @@ const ProfileForm = ({ initialName, initialAvatarUrl, email }) => {
           disabled={saving || uploading || !isDirty}
           className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 dark:disabled:bg-gray-700 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors"
         >
-          {saving ? 'Saving...' : 'Save changes'}
+          {saving ? "Saving..." : "Save changes"}
         </button>
       </div>
     </form>
