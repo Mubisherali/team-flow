@@ -1,101 +1,133 @@
 // -------------------------------------------------------------
-// WorkspaceListClient - Client wrapper for the workspaces page
+// WorkspaceListClient - Grid of workspaces + create modal
 // -------------------------------------------------------------
 //
 // WHY A CLIENT WRAPPER:
-// The page is a server component that fetches data. But we
-// need:
-//   - Modal state (open/close)
-//   - A "refresh" mechanism after creating a workspace
-//   - Click handlers
+//   The page (server) fetches data. This component handles:
+//     - Modal open/close state
+//     - After-create refresh (via router.refresh)
+//     - Interactive cards
 //
-// So we split: server fetches, client interacts.
+// POLISH:
+//   - Framer Motion stagger on cards
+//   - Card hover lift
+//   - Refined brand tiles, role badges, stats
+//   - Better empty state
 //
 // PROPS:
-//   initialWorkspaces : array from the server
-//
-// REFRESH PATTERN:
-// After creating a workspace, we do NOT mutate the array in
-// place. Instead, we call router.refresh() which tells Next.js
-// to re-run the server component (re-fetch from DB). Cleaner
-// than manual state syncing.
+//   initialWorkspaces : array of { id, name, slug, description,
+//                        role, memberCount, projectCount,
+//                        createdAt }
 // -------------------------------------------------------------
 
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { motion } from 'framer-motion';
 
 import CreateWorkspaceModal from './CreateWorkspaceModal';
 
+// -------------------------------------------------------------
+// ANIMATION VARIANTS
+// -------------------------------------------------------------
+const gridVariants = {
+  hidden: {},
+  show: {
+    transition: {
+      staggerChildren: 0.05,
+      delayChildren: 0.05,
+    },
+  },
+};
+
+const cardVariants = {
+  hidden: { opacity: 0, y: 12 },
+  show: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.35, ease: 'easeOut' },
+  },
+};
+
+// -------------------------------------------------------------
+// MAIN
+// -------------------------------------------------------------
 const WorkspaceListClient = ({ initialWorkspaces }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const router = useRouter();
 
-  // ─── After creating a workspace ───
-  // Close the modal and refresh the server component so the
-  // new workspace appears. Optionally redirect to it.
-  const handleCreated = (workspace) => {
+  const handleCreated = () => {
     setIsModalOpen(false);
-    // Option A: stay on list and see it appear
     router.refresh();
-    // Option B: jump straight into the new workspace
-    // router.push(`/workspaces/${workspace.id}`);
   };
+
+  const isEmpty = initialWorkspaces.length === 0;
 
   return (
     <>
-      {/* ----- Page header ----- */}
-      <div className="flex items-center justify-between mb-8">
+      {/* ══════════ HEADER ══════════ */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-gray-900 dark:text-white">
             Workspaces
           </h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            {initialWorkspaces.length === 0
+          <p className="text-[13.5px] text-gray-500 dark:text-gray-400 mt-1">
+            {isEmpty
               ? 'Create your first workspace to get started'
               : `${initialWorkspaces.length} workspace${initialWorkspaces.length === 1 ? '' : 's'}`}
           </p>
         </div>
 
         <button
+          type="button"
           onClick={() => setIsModalOpen(true)}
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium transition-colors"
+          className="
+            inline-flex items-center justify-center gap-2
+            px-4 py-2.5 rounded-xl
+            bg-indigo-600 hover:bg-indigo-700
+            text-white text-[13px] font-medium
+            active:scale-[0.98]
+            transition-all duration-200
+            shadow-sm shadow-indigo-500/20
+            self-start sm:self-auto
+          "
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+          >
             <path d="M12 5v14M5 12h14" strokeLinecap="round" />
           </svg>
           New workspace
         </button>
       </div>
 
-      {/* ----- Content ----- */}
-      {initialWorkspaces.length === 0 ? (
+      {/* ══════════ CONTENT ══════════ */}
+      {isEmpty ? (
         <EmptyState onCreateClick={() => setIsModalOpen(true)} />
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <motion.div
+          initial="hidden"
+          animate="show"
+          variants={gridVariants}
+          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
+        >
           {initialWorkspaces.map((ws) => (
             <WorkspaceCard key={ws.id} workspace={ws} />
           ))}
 
-          {/* "Create" card at the end of the grid */}
-          <button
-            onClick={() => setIsModalOpen(true)}
-            className="group flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-700 p-6 min-h-[180px] hover:border-indigo-400 dark:hover:border-indigo-600 hover:bg-indigo-50/40 dark:hover:bg-indigo-950/30 transition-colors"
-          >
-            <div className="w-10 h-10 rounded-full bg-gray-100 dark:bg-gray-800 group-hover:bg-indigo-100 dark:group-hover:bg-indigo-900 flex items-center justify-center transition-colors">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-gray-500 group-hover:text-indigo-600 dark:group-hover:text-indigo-400">
-                <path d="M12 5v14M5 12h14" strokeLinecap="round" />
-              </svg>
-            </div>
-            <span className="text-sm font-medium text-gray-600 dark:text-gray-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400">
-              Create workspace
-            </span>
-          </button>
-        </div>
+          {/* Dashed "create" card */}
+          <CreateCard onClick={() => setIsModalOpen(true)} />
+        </motion.div>
       )}
 
-      {/* ----- Modal ----- */}
+      {/* ══════════ MODAL ══════════ */}
       <CreateWorkspaceModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
@@ -106,75 +138,235 @@ const WorkspaceListClient = ({ initialWorkspaces }) => {
 };
 
 // =============================================================
-// WorkspaceCard - Single workspace card
+// WorkspaceCard
 // =============================================================
 const WorkspaceCard = ({ workspace }) => {
   return (
-    <a
-      href={`/workspaces/${workspace.id}`}
-      className="group flex flex-col rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-5 min-h-[180px] hover:border-indigo-400 dark:hover:border-indigo-700 hover:shadow-md transition-all"
-    >
-      {/* Header: avatar + role badge */}
-      <div className="flex items-start justify-between gap-2 mb-3">
-        <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
-          {workspace.name.slice(0, 2).toUpperCase()}
+    <motion.div variants={cardVariants}>
+      <Link
+        href={`/workspaces/${workspace.id}`}
+        className="
+          group flex flex-col h-full
+          rounded-2xl
+          border border-gray-200 dark:border-white/[0.06]
+          bg-white dark:bg-white/[0.02]
+          p-5
+          min-h-[190px]
+          hover:border-indigo-300 dark:hover:border-indigo-500/30
+          hover:shadow-lg hover:shadow-indigo-500/5
+          hover:-translate-y-0.5
+          transition-all duration-200
+        "
+      >
+        {/* Header: brand tile + role */}
+        <div className="flex items-start justify-between gap-2 mb-4">
+          <div className="relative">
+            <div
+              className="
+                w-11 h-11 rounded-xl
+                bg-gradient-to-br from-indigo-500 to-violet-600
+                flex items-center justify-center
+                text-white font-bold text-[13px]
+                shadow-sm shadow-indigo-500/25
+                ring-1 ring-black/5 dark:ring-white/[0.06]
+                group-hover:scale-105
+                transition-transform duration-200
+              "
+            >
+              {workspace.name.slice(0, 2).toUpperCase()}
+            </div>
+          </div>
+
+          <RoleBadge role={workspace.role} />
         </div>
-        <RoleBadge role={workspace.role} />
-      </div>
 
-      {/* Name + slug */}
-      <h3 className="font-semibold text-gray-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors truncate">
-        {workspace.name}
-      </h3>
-      <p className="text-xs text-gray-500 dark:text-gray-400 font-mono truncate mb-2">
-        /{workspace.slug}
-      </p>
-
-      {/* Description */}
-      {workspace.description && (
-        <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2 mb-3">
-          {workspace.description}
+        {/* Name + slug */}
+        <h3
+          className="
+            text-[15px] font-semibold text-gray-900 dark:text-white
+            group-hover:text-indigo-600 dark:group-hover:text-indigo-400
+            transition-colors truncate
+          "
+        >
+          {workspace.name}
+        </h3>
+        <p className="text-[11.5px] text-gray-400 dark:text-gray-500 font-mono truncate mb-2.5">
+          /{workspace.slug}
         </p>
-      )}
 
-      {/* Spacer to push stats to bottom */}
-      <div className="flex-1" />
+        {/* Description */}
+        {workspace.description ? (
+          <p className="text-[13px] text-gray-600 dark:text-gray-400 line-clamp-2 leading-relaxed">
+            {workspace.description}
+          </p>
+        ) : (
+          <p className="text-[13px] text-gray-400 dark:text-gray-600 italic">
+            No description
+          </p>
+        )}
 
-      {/* Stats */}
-      <div className="flex items-center gap-4 pt-3 border-t border-gray-100 dark:border-gray-800 text-xs text-gray-600 dark:text-gray-400">
-        <div className="flex items-center gap-1.5">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" strokeLinecap="round" />
-            <circle cx="9" cy="7" r="4" />
-            <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" strokeLinecap="round" />
-          </svg>
-          <span>{workspace.memberCount}</span>
+        {/* Spacer */}
+        <div className="flex-1" />
+
+        {/* Stats */}
+        <div
+          className="
+            flex items-center gap-4
+            pt-3 mt-3
+            border-t border-gray-100 dark:border-white/[0.04]
+            text-[11.5px] text-gray-500 dark:text-gray-500
+          "
+        >
+          <Stat
+            icon={
+              <svg
+                width="13"
+                height="13"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <path
+                  d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"
+                  strokeLinecap="round"
+                />
+                <circle cx="9" cy="7" r="4" />
+                <path
+                  d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"
+                  strokeLinecap="round"
+                />
+              </svg>
+            }
+            label={workspace.memberCount}
+          />
+          <Stat
+            icon={
+              <svg
+                width="13"
+                height="13"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <path
+                  d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            }
+            label={`${workspace.projectCount} project${workspace.projectCount === 1 ? '' : 's'}`}
+          />
         </div>
-        <div className="flex items-center gap-1.5">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-          <span>{workspace.projectCount} projects</span>
-        </div>
-      </div>
-    </a>
+      </Link>
+    </motion.div>
   );
 };
 
 // =============================================================
-// RoleBadge - Small badge showing OWNER / MANAGER / MEMBER
+// Stat - small icon + label pair in the card footer
+// =============================================================
+const Stat = ({ icon, label }) => (
+  <span className="inline-flex items-center gap-1.5">
+    {icon}
+    <span>{label}</span>
+  </span>
+);
+
+// =============================================================
+// CreateCard - dashed card at the end of the grid
+// =============================================================
+const CreateCard = ({ onClick }) => (
+  <motion.div variants={cardVariants}>
+    <button
+      type="button"
+      onClick={onClick}
+      className="
+        group w-full h-full min-h-[190px]
+        rounded-2xl
+        border-2 border-dashed
+        border-gray-200 dark:border-white/[0.08]
+        p-6
+        flex flex-col items-center justify-center gap-3
+        hover:border-indigo-400 dark:hover:border-indigo-500/40
+        hover:bg-indigo-50/40 dark:hover:bg-indigo-500/[0.04]
+        active:scale-[0.99]
+        transition-all duration-200
+      "
+    >
+      <div
+        className="
+          w-11 h-11 rounded-xl
+          bg-gray-100 dark:bg-white/[0.04]
+          text-gray-500 dark:text-gray-400
+          group-hover:bg-indigo-100 dark:group-hover:bg-indigo-500/15
+          group-hover:text-indigo-600 dark:group-hover:text-indigo-400
+          flex items-center justify-center
+          transition-colors duration-200
+        "
+      >
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+        >
+          <path d="M12 5v14M5 12h14" strokeLinecap="round" />
+        </svg>
+      </div>
+      <span
+        className="
+          text-[13px] font-medium
+          text-gray-600 dark:text-gray-400
+          group-hover:text-indigo-600 dark:group-hover:text-indigo-400
+          transition-colors duration-200
+        "
+      >
+        Create workspace
+      </span>
+    </button>
+  </motion.div>
+);
+
+// =============================================================
+// RoleBadge - Pill badge with a dot indicator
 // =============================================================
 const RoleBadge = ({ role }) => {
   const styles = {
-    OWNER: 'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300',
-    MANAGER: 'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300',
-    MEMBER: 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400',
+    OWNER: {
+      bg: 'bg-amber-50 dark:bg-amber-500/10',
+      text: 'text-amber-700 dark:text-amber-400',
+      dot: 'bg-amber-500',
+    },
+    MANAGER: {
+      bg: 'bg-blue-50 dark:bg-blue-500/10',
+      text: 'text-blue-700 dark:text-blue-400',
+      dot: 'bg-blue-500',
+    },
+    MEMBER: {
+      bg: 'bg-gray-100 dark:bg-white/[0.06]',
+      text: 'text-gray-600 dark:text-gray-400',
+      dot: 'bg-gray-400',
+    },
   };
+
+  const s = styles[role] || styles.MEMBER;
 
   return (
     <span
-      className={`text-[10px] font-semibold px-2 py-0.5 rounded uppercase tracking-wide flex-shrink-0 ${styles[role] || styles.MEMBER}`}
+      className={`
+        inline-flex items-center gap-1.5
+        text-[10px] font-semibold uppercase tracking-wider
+        px-2 py-1 rounded-md
+        ${s.bg} ${s.text}
+        flex-shrink-0
+      `}
     >
+      <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
       {role}
     </span>
   );
@@ -183,34 +375,87 @@ const RoleBadge = ({ role }) => {
 // =============================================================
 // EmptyState - Shown when the user has no workspaces
 // =============================================================
-const EmptyState = ({ onCreateClick }) => {
-  return (
-    <div className="flex flex-col items-center justify-center py-20 px-4 rounded-2xl border border-dashed border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900">
-      <div className="w-14 h-14 rounded-full bg-indigo-100 dark:bg-indigo-950 flex items-center justify-center mb-4">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-indigo-600 dark:text-indigo-400">
+const EmptyState = ({ onCreateClick }) => (
+  <motion.div
+    initial={{ opacity: 0, y: 12 }}
+    animate={{ opacity: 1, y: 0 }}
+    transition={{ duration: 0.4, ease: 'easeOut' }}
+    className="
+      relative overflow-hidden
+      flex flex-col items-center justify-center
+      py-20 px-4
+      rounded-2xl
+      border border-dashed border-gray-200 dark:border-white/[0.08]
+      bg-white dark:bg-white/[0.02]
+    "
+  >
+    {/* Soft radial glow */}
+    <div
+      aria-hidden="true"
+      className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,_rgba(99,102,241,0.06),transparent_60%)]"
+    />
+
+    <div className="relative flex flex-col items-center">
+      {/* Icon */}
+      <div
+        className="
+          w-16 h-16 rounded-2xl
+          bg-gradient-to-br from-indigo-500 to-violet-600
+          flex items-center justify-center
+          mb-5
+          shadow-lg shadow-indigo-500/25
+        "
+      >
+        <svg
+          width="26"
+          height="26"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="white"
+          strokeWidth="1.8"
+        >
           <rect x="3" y="3" width="7" height="7" rx="1.5" />
           <rect x="14" y="3" width="7" height="7" rx="1.5" />
           <rect x="3" y="14" width="7" height="7" rx="1.5" />
           <rect x="14" y="14" width="7" height="7" rx="1.5" />
         </svg>
       </div>
-      <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
-        No workspaces yet
+
+      <h3 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white mb-2">
+        Create your first workspace
       </h3>
-      <p className="text-sm text-gray-500 dark:text-gray-400 mb-6 text-center max-w-sm">
-        A workspace is where your team collaborates — projects, tasks, and members all live inside one.
+      <p className="text-[13.5px] text-gray-500 dark:text-gray-400 mb-7 text-center max-w-md leading-relaxed">
+        A workspace is where your team collaborates — projects, tasks, and
+        members all live inside one.
       </p>
+
       <button
+        type="button"
         onClick={onCreateClick}
-        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium transition-colors"
+        className="
+          group inline-flex items-center gap-2
+          px-5 py-2.5 rounded-xl
+          bg-indigo-600 hover:bg-indigo-700
+          text-white text-[13px] font-medium
+          active:scale-[0.98]
+          transition-all duration-200
+          shadow-lg shadow-indigo-500/25
+        "
       >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+        >
           <path d="M12 5v14M5 12h14" strokeLinecap="round" />
         </svg>
-        Create your first workspace
+        Create workspace
       </button>
     </div>
-  );
-};
+  </motion.div>
+);
 
 export default WorkspaceListClient;

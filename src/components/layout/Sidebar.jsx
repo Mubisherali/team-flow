@@ -3,25 +3,25 @@
 // -------------------------------------------------------------
 //
 // STRUCTURE (top to bottom):
-//   1. Brand row (logo + name)
+//   1. Brand row (logo + name) + close button (mobile)
 //   2. Workspace switcher (dropdown)
 //   3. Dashboard link (flat)
 //   4. Active modules (context-aware, from useSidebarModules)
-//   5. Notification bell
-//   6. User menu
+//   5. Notification bell (DESKTOP ONLY — mobile uses top bar)
+//   6. User menu (both)
 //
-// CONTEXT AWARENESS:
-//   The modules change based on where the user is:
-//     - Not in a workspace    → no modules
-//     - In a workspace        → Overview, Projects, Members, Settings
-//     - In a project          → Overview, Tasks, Members, Settings
-//     - In a task             → Task details, Discussion
+// RESPONSIVE:
+//   - On mobile, this component is rendered INSIDE a drawer
+//     (see SidebarDrawer.jsx). It receives `onClose` to close
+//     the drawer when the X is tapped.
+//   - On desktop, `onClose` is undefined; the close button
+//     is not rendered.
+//   - The bell is hidden on mobile (uses MobileTopbar's bell).
 //
 // PROPS:
 //   user       : { id, name, email, image }
 //   workspaces : [{ id, name, slug, role }]
-//   stats      : { projectCount, openTasks, doneTasks, memberCount }
-//                (optional — used for module subtexts)
+//   onClose    : optional — closes the mobile drawer
 // -------------------------------------------------------------
 
 'use client';
@@ -37,7 +37,8 @@ import NotificationBell from './NotificationBell';
 import NotificationToggleItems from './NotificationToggle';
 import { useSidebarModules } from '@/hooks/useSidebarModules';
 import { useSidebarStats } from '@/hooks/useSidebarStats';
-const Sidebar = ({ user, workspaces = {} }) => {
+
+const Sidebar = ({ user, workspaces = [], onClose }) => {
   const safeUser = user || {};
   const safeWorkspaces = Array.isArray(workspaces) ? workspaces : [];
 
@@ -51,17 +52,16 @@ const Sidebar = ({ user, workspaces = {} }) => {
 
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
-  // ─── Compute modules from context ───
- // ─── Fetch stats for the current context ───
-const stats = useSidebarStats({ workspaceId, projectId });
+  // ─── Fetch stats for the current context ───
+  const stats = useSidebarStats({ workspaceId, projectId });
 
-// ─── Compute modules from context ───
-const modules = useSidebarModules({
-  workspaceId,
-  projectId,
-  taskId,
-  stats,
-});
+  // ─── Compute modules from context ───
+  const modules = useSidebarModules({
+    workspaceId,
+    projectId,
+    taskId,
+    stats,
+  });
 
   // ─── Helpers ───
   const getInitials = (name) => {
@@ -89,45 +89,82 @@ const modules = useSidebarModules({
   return (
     <aside
       className="
-        w-[270px] flex-shrink-0
-        h-screen sticky top-0
+        w-full h-full
         flex flex-col
         bg-white dark:bg-[#0b0d12]
-        border-r border-gray-200 dark:border-white/[0.06]
+        lg:w-[270px] lg:flex-shrink-0 lg:h-screen lg:sticky lg:top-0
+        lg:border-r lg:border-gray-200 lg:dark:border-white/[0.06]
       "
     >
-      {/* ─── BRAND ─── */}
-      <div className="px-5 py-2 border-b border-gray-200 dark:border-white/[0.06]">
-        <Link href="/workspaces" className="flex items-center  group">
-          <div
-            className="
-             
-            "
-          >
-            
-            <img src="/logo.png" alt="" width={60} />
-                      </div>
+      {/* ─── BRAND ROW ─── */}
+      <div className="px-5 py-3 flex items-center justify-between border-b border-gray-200 dark:border-white/[0.06]">
+        <Link
+          href="/workspaces"
+          onClick={() => onClose?.()}
+          className="flex items-center gap-2.5 group min-w-0"
+        >
+          {/* Logo */}
+          <img
+            src="/logo.png"
+            alt="TeamFlow"
+            width={36}
+            height={36}
+            className="rounded-lg flex-shrink-0"
+          />
 
           <div className="min-w-0">
-            <p className="text-sm font-bold tracking-tight text-gray-900 dark:text-white">
+            <p className="text-[13px] font-bold tracking-tight text-gray-900 dark:text-white truncate">
               TeamFlow
             </p>
-            <p className="text-[9.5px] text-gray-500 dark:text-gray-500 uppercase tracking-wider">
+            <p className="text-[9px] text-gray-500 dark:text-gray-500 uppercase tracking-wider truncate">
               Workspace
             </p>
           </div>
         </Link>
+
+        {/* Close button — mobile only */}
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            className="
+              lg:hidden
+              w-8 h-8 flex items-center justify-center
+              rounded-lg flex-shrink-0
+              text-gray-500 dark:text-gray-400
+              hover:bg-gray-100 dark:hover:bg-white/[0.06]
+              transition-colors
+            "
+            aria-label="Close menu"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path
+                d="M18 6L6 18M6 6l12 12"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
+        )}
       </div>
 
       {/* ─── MAIN CONTENT ─── */}
       <nav className="flex-1 overflow-y-auto px-3 py-4 scrollbar-thin">
         {/* Workspace switcher */}
-        <WorkspaceSwitcher workspaces={safeWorkspaces} />
+        <WorkspaceSwitcher workspaces={safeWorkspaces} onClose={onClose} />
 
         {/* Dashboard link */}
         <div className="mt-4">
           <Link
             href="/workspaces"
+            onClick={() => onClose?.()}
             className={`
               group relative flex items-center gap-3 px-3 py-2.5 rounded-xl
               text-[13px] font-medium transition-all duration-200
@@ -191,29 +228,31 @@ const modules = useSidebarModules({
 
             <div className="space-y-1">
               {modules.map((mod) => (
-                <ModuleCard
-                  key={mod.key}
-                  href={mod.href}
-                  name={mod.name}
-                  subtext={mod.subtext}
-                  icon={mod.icon}
-                  iconBg={mod.iconBg}
-                  exact={mod.exact}
-                  badge={mod.badge}
-                />
+                <div key={mod.key} onClick={() => onClose?.()}>
+                  <ModuleCard
+                    href={mod.href}
+                    name={mod.name}
+                    subtext={mod.subtext}
+                    icon={mod.icon}
+                    iconBg={mod.iconBg}
+                    exact={mod.exact}
+                    badge={mod.badge}
+                  />
+                </div>
               ))}
             </div>
           </div>
         )}
       </nav>
 
-      {/* ─── NOTIFICATION BELL ─── */}
-      <div className="px-3 pt-2 pb-1 border-t border-gray-200 dark:border-white/[0.06]">
+      {/* ─── NOTIFICATION BELL (desktop only) ─── */}
+      {/* On mobile the bell lives in MobileTopbar. */}
+      <div className="hidden lg:block px-3 pt-2 pb-1 border-t border-gray-200 dark:border-white/[0.06]">
         <NotificationBell />
       </div>
 
       {/* ─── USER AREA ─── */}
-      <div className="relative p-3 pt-1">
+      <div className="relative p-3 pt-2 lg:pt-1 border-t border-gray-200 dark:border-white/[0.06] lg:border-t-0">
         {/* User dropdown */}
         {userMenuOpen && (
           <>
@@ -241,7 +280,10 @@ const modules = useSidebarModules({
 
               <Link
                 href="/settings/profile"
-                onClick={() => setUserMenuOpen(false)}
+                onClick={() => {
+                  setUserMenuOpen(false);
+                  onClose?.();
+                }}
                 className="
                   flex items-center gap-3
                   px-3 py-2 rounded-xl

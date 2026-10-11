@@ -2,13 +2,18 @@
 // Workspaces List Page
 // -------------------------------------------------------------
 //
-// SERVER COMPONENT — fetches the user's workspaces from the DB
-// server-side (no API roundtrip), then hands off to a client
-// wrapper that manages the create-workspace modal.
+// SERVER COMPONENT:
+//   - Auth check (defense in depth — layout also checks)
+//   - Fetches the user's workspaces from the DB
+//   - Passes them to a client wrapper
 //
-// TWO-COMPONENT PATTERN:
-//   page.jsx               → server: fetches data
-//   WorkspaceListClient.jsx → client: modal + interactivity
+// WHY SERVER-SIDE FETCH:
+//   No API roundtrip — the server talks to Prisma directly.
+//   The client component gets plain JSON-serializable props.
+//
+// PADDING:
+//   Mobile-first: p-5 on phones, p-8 on sm+.
+//   Content is centered in a max-w-6xl container.
 // -------------------------------------------------------------
 
 import { redirect } from 'next/navigation';
@@ -18,15 +23,22 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import WorkspaceListClient from '@/components/workspace/WorkspaceListClient';
 
+// -------------------------------------------------------------
+// PAGE METADATA
+// -------------------------------------------------------------
+// Sets the browser tab title. Next.js reads this export.
+export const metadata = {
+  title: 'Workspaces · TeamFlow',
+};
+
 export default async function WorkspacesPage() {
-  // ─── Step 1: Auth check ───
-  // The layout already checks, but defense in depth.
+  // ─── Auth check ───
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
     redirect('/login');
   }
 
-  // ─── Step 2: Fetch workspaces ───
+  // ─── Fetch workspaces ───
   const memberships = await prisma.workspaceMember.findMany({
     where: { userId: session.user.id },
     include: {
@@ -49,12 +61,12 @@ export default async function WorkspacesPage() {
     role: m.role,
     memberCount: m.workspace._count.members,
     projectCount: m.workspace._count.projects,
-    createdAt: m.workspace.createdAt.toISOString(), // serialize for client
+    createdAt: m.workspace.createdAt.toISOString(),
   }));
 
-  // ─── Step 3: Render header + client grid ───
+  // ─── Render ───
   return (
-    <div className="p-8 max-w-6xl mx-auto">
+    <div className="p-5 sm:p-8 max-w-6xl mx-auto">
       <WorkspaceListClient initialWorkspaces={workspaces} />
     </div>
   );
