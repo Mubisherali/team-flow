@@ -7,25 +7,28 @@
 //   tasks        : array of tasks in this column
 //   onOpenTask   : (taskId) => void — open the detail modal
 //   onAddTask    : (status) => void — open create modal prefilled
+//   onOpenFull   : (taskId) => void — navigate to task page
+//   onAskQuestion: (taskId) => void — navigate to task page #comments
 //   activeTaskId : currently dragged task id (to dim its card)
 //
-// TWO PIECES OF @dnd-kit MAGIC:
-//   1. useDroppable — marks this column as a drop target
-//   2. SortableContext — tells dnd-kit the sortable order of
-//      the tasks inside this column (needed for intra-column
-//      reordering with the sortable preset)
+// POLISH:
+//   - Refined header (dot + label + count pill)
+//   - Cleaner drop area with subtle idle border
+//   - Better empty state (icon + copy)
+//   - "Drop here" hint when dragging over an empty column
+//   - Refined "Add task" button
 // -------------------------------------------------------------
 
-"use client";
+'use client';
 
-import { useDroppable } from "@dnd-kit/core";
+import { useDroppable } from '@dnd-kit/core';
 import {
   SortableContext,
   verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
+} from '@dnd-kit/sortable';
 
-import TaskCard from "./TaskCard";
-import { statusMeta } from "@/lib/task-constants";
+import TaskCard from './TaskCard';
+import { statusMeta } from '@/lib/task-constants';
 
 const KanbanColumn = ({
   status,
@@ -38,40 +41,59 @@ const KanbanColumn = ({
 }) => {
   const meta = statusMeta(status);
 
-  // Mark this column as droppable. dnd-kit uses `id` to
-  // distinguish drop targets — we use the status value.
   const { setNodeRef, isOver } = useDroppable({
     id: `column-${status}`,
     data: { status },
   });
 
-  // Task ids feed the sortable context so dnd-kit knows the
-  // order of items within this column.
   const taskIds = tasks.map((t) => t.id);
+  const isEmpty = tasks.length === 0;
 
   return (
-    <div className="flex flex-col w-full min-w-[260px] max-w-[320px]">
-      {/* ─── Header ─── */}
-      <div className="flex items-center justify-between px-3 py-2 mb-2">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${meta.dot}`} />
-          <h3 className="text-sm font-semibold text-gray-900 dark:text-white truncate">
-            {meta.label}
-          </h3>
-          <span className="text-xs text-gray-500 dark:text-gray-400 flex-shrink-0">
-            {tasks.length}
-          </span>
-        </div>
+    <div className="flex flex-col w-full min-w-[240px] sm:min-w-[260px] max-w-[320px]">
+      {/* ══════════ HEADER ══════════ */}
+      <div className="flex items-center gap-2 px-2.5 mb-2.5">
+        {/* Status dot */}
+        <span
+          className={`w-2 h-2 rounded-full flex-shrink-0 ${meta.dot} ring-2 ring-white dark:ring-[#0a0c10]`}
+        />
+
+        {/* Label */}
+        <h3 className="text-[13px] font-semibold text-gray-700 dark:text-gray-300 truncate">
+          {meta.label}
+        </h3>
+
+        {/* Count pill */}
+        <span
+          className="
+            ml-0.5 inline-flex items-center justify-center
+            min-w-[20px] h-5 px-1.5
+            rounded-md
+            text-[10.5px] font-semibold
+            bg-gray-100 dark:bg-white/[0.05]
+            text-gray-500 dark:text-gray-400
+          "
+        >
+          {tasks.length}
+        </span>
       </div>
 
-      {/* ─── Drop area ─── */}
+      {/* ══════════ DROP AREA ══════════ */}
       <div
         ref={setNodeRef}
-        className={`flex-1 flex flex-col gap-2 p-2 rounded-xl border-2 transition-colors min-h-[200px] ${
-          isOver
-            ? "border-indigo-400 dark:border-indigo-600 bg-indigo-50/50 dark:bg-indigo-950/30"
-            : "border-transparent bg-gray-50/70 dark:bg-gray-900/40"
-        }`}
+        className={`
+          flex-1 flex flex-col gap-2
+          p-2.5
+          rounded-2xl
+          border
+          transition-all duration-200
+          min-h-[200px]
+          ${
+            isOver
+              ? 'border-indigo-400 dark:border-indigo-500/40 bg-indigo-50/60 dark:bg-indigo-500/[0.06] shadow-sm shadow-indigo-500/10'
+              : 'border-gray-200/60 dark:border-white/[0.04] bg-gray-50/50 dark:bg-white/[0.015]'
+          }
+        `}
       >
         <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
           {tasks.map((task) => (
@@ -86,26 +108,90 @@ const KanbanColumn = ({
           ))}
         </SortableContext>
 
-        {/* Empty state */}
-        {tasks.length === 0 && (
-          <div className="flex-1 flex items-center justify-center py-8">
-            <p className="text-xs text-gray-400 dark:text-gray-600">No tasks</p>
+        {/* ─── Empty state ─── */}
+        {isEmpty && (
+          <div
+            className={`
+              flex-1 flex flex-col items-center justify-center
+              py-8 px-3
+              transition-colors duration-200
+            `}
+          >
+            {isOver ? (
+              // Drop hint while dragging over an empty column
+              <div className="flex flex-col items-center gap-1.5 text-center">
+                <span className="w-8 h-8 rounded-lg bg-indigo-100 dark:bg-indigo-500/15 flex items-center justify-center">
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    className="text-indigo-600 dark:text-indigo-400"
+                  >
+                    <path
+                      d="M12 5v14M5 12h14"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                </span>
+                <p className="text-[11px] font-medium text-indigo-600 dark:text-indigo-400">
+                  Drop here
+                </p>
+              </div>
+            ) : (
+              // Idle empty state
+              <div className="flex flex-col items-center gap-1 text-center">
+                <span className="w-7 h-7 rounded-md bg-gray-100/80 dark:bg-white/[0.03] flex items-center justify-center">
+                  <svg
+                    width="13"
+                    height="13"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    className="text-gray-400 dark:text-gray-600"
+                  >
+                    <rect x="3" y="3" width="18" height="18" rx="2" />
+                    <path
+                      d="M9 12h6"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                </span>
+                <p className="text-[11px] text-gray-400 dark:text-gray-600">
+                  No tasks
+                </p>
+              </div>
+            )}
           </div>
         )}
 
-        {/* Add task button */}
+        {/* ─── Add task button ─── */}
         <button
           type="button"
           onClick={() => onAddTask?.(status)}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white dark:hover:bg-gray-800 transition-colors"
+          className="
+            group/add flex items-center gap-1.5
+            px-2.5 py-2 mt-auto
+            rounded-lg
+            text-[12px] font-medium
+            text-gray-500 dark:text-gray-500
+            hover:text-indigo-600 dark:hover:text-indigo-400
+            hover:bg-white dark:hover:bg-white/[0.04]
+            active:scale-[0.98]
+            transition-all duration-150
+          "
         >
           <svg
-            width="12"
-            height="12"
+            width="13"
+            height="13"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
             strokeWidth="2.5"
+            className="transition-transform duration-150 group-hover/add:rotate-90"
           >
             <path d="M12 5v14M5 12h14" strokeLinecap="round" />
           </svg>

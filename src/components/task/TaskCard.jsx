@@ -9,28 +9,25 @@
 //   onAskQuestion   : (taskId) => void — navigate to task page #comments
 //   isDragging      : boolean — true when THIS card is being dragged
 //
-// INTERACTIONS:
-//   - Click card (no movement)     → onOpen (modal)
-//   - Drag card                    → dnd-kit handles it
-//   - Click ⋯ button (top-right)   → opens the card menu
-//   - Menu: "Open full task"       → onOpenFull
-//   - Menu: "Ask a question"       → onAskQuestion
-//   - Click outside / Escape       → closes the menu
+// POLISH:
+//   - Left priority accent bar (replaces the tiny dot)
+//   - Hover lift (2px) with smooth transitions
+//   - Menu button: hidden on desktop-until-hover, always visible on mobile
+//   - Menu fades in
+//   - Focus-visible ring for keyboard users
+//   - Better dark-mode colors (glass effect)
 //
-// DONE TREATMENT:
-//   Faded, strikethrough title, gray priority dot, no due date.
-//
-// CLICK VS DRAG:
-//   dnd-kit's activationConstraint handles this on the parent.
-//   A click without movement fires onClick; a drag doesn't.
-//   The ⋯ button calls stopPropagation so clicking it never
-//   triggers the card's onClick.
+// PRESERVED:
+//   - dnd-kit listeners/attributes on the outer div
+//   - Menu button stops propagation (so drag doesn't start)
+//   - Menu items stop propagation (so card onClick doesn't fire)
 // -------------------------------------------------------------
 
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
 import { useDraggable } from '@dnd-kit/core';
+import { motion, AnimatePresence } from 'framer-motion';
 
 import { priorityMeta, dueDateMeta } from '@/lib/task-constants';
 
@@ -53,7 +50,7 @@ const TaskCard = ({
   const due = dueDateMeta(task.dueDate);
   const isDone = task.status === 'DONE';
 
-  // Close the menu on outside click
+  // ─── Menu: close on outside click ───
   useEffect(() => {
     if (!menuOpen) return;
     const handler = (e) => {
@@ -65,7 +62,7 @@ const TaskCard = ({
     return () => document.removeEventListener('mousedown', handler);
   }, [menuOpen]);
 
-  // Close on Escape
+  // ─── Menu: close on Escape ───
   useEffect(() => {
     if (!menuOpen) return;
     const handler = (e) => {
@@ -76,13 +73,11 @@ const TaskCard = ({
   }, [menuOpen]);
 
   const handleCardClick = () => {
-    // Don't open the modal while the menu is open
     if (menuOpen) return;
     onOpen?.(task.id);
   };
 
   const handleMenuButtonClick = (e) => {
-    // Critical: don't let the card's onClick fire
     e.stopPropagation();
     setMenuOpen((v) => !v);
   };
@@ -99,9 +94,15 @@ const TaskCard = ({
     onAskQuestion?.(task.id);
   };
 
+  // ─── Overall opacity (dragging beats done) ───
   const style = {
-    opacity: isDragging ? 0.4 : isDone ? 0.6 : 1,
+    opacity: isDragging ? 0.35 : isDone ? 0.7 : 1,
   };
+
+  // ─── Left accent bar color (priority) ───
+  const accentBarClass = isDone
+    ? 'bg-emerald-500/60'
+    : priority.dot; // e.g. 'bg-gray-400' | 'bg-blue-500' | 'bg-amber-500' | 'bg-red-500'
 
   return (
     <div
@@ -110,232 +111,327 @@ const TaskCard = ({
       {...listeners}
       {...attributes}
       onClick={handleCardClick}
-      className={`relative group rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3 cursor-pointer hover:border-indigo-300 dark:hover:border-indigo-800 hover:shadow-sm transition-all ${
-        isDragging ? 'cursor-grabbing' : ''
-      } ${isDone ? 'hover:opacity-80' : ''}`}
+      title={task.title}
+            className={`
+        group relative
+        rounded-xl
+        border border-gray-200 dark:border-white/[0.06]
+        bg-white dark:bg-white/[0.02]
+        cursor-pointer
+        transition-all duration-200
+        hover:border-indigo-300 dark:hover:border-indigo-500/30
+        hover:shadow-md hover:shadow-black/5 dark:hover:shadow-black/30
+        hover:-translate-y-0.5
+        focus-within:ring-2 focus-within:ring-indigo-500/60
+        ${isDragging ? 'cursor-grabbing' : ''}
+      `}
     >
-      {/* Title row + menu trigger */}
-      <div className="flex items-start gap-2 mb-2">
-        <p
-          className={`flex-1 text-sm font-medium leading-snug line-clamp-2 ${
-            isDone
-              ? 'text-gray-400 dark:text-gray-500 line-through'
-              : 'text-gray-900 dark:text-white'
-          }`}
-        >
-          {task.title}
-        </p>
+      {/* Priority accent bar */}
+          <span
+        aria-hidden="true"
+        className={`
+          absolute left-0 top-0 bottom-0 w-1
+          rounded-l-xl
+          ${accentBarClass}
+          ${isDone ? 'opacity-60' : ''}
+        `}
+      />
 
-        {/* ⋯ Menu trigger — appears on hover */}
-        <div ref={menuRef} className="relative flex-shrink-0">
-          <button
-            type="button"
-            onClick={handleMenuButtonClick}
-            onPointerDown={(e) => e.stopPropagation()}
-            className={`p-1 rounded-md text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-opacity ${
-              menuOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-            }`}
-            title="More actions"
-            aria-label="More actions"
+      {/* Body */}
+      <div className="pl-3.5 pr-2.5 py-2.5">
+        {/* Title row + menu trigger */}
+        <div className="flex items-start gap-2 mb-2">
+          <p
+            className={`
+              flex-1 text-[13.5px] font-medium leading-snug line-clamp-2
+              ${
+                isDone
+                  ? 'text-gray-400 dark:text-gray-500 line-through'
+                  : 'text-gray-900 dark:text-white'
+              }
+            `}
           >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <circle cx="5" cy="12" r="1.5" fill="currentColor" />
-              <circle cx="12" cy="12" r="1.5" fill="currentColor" />
-              <circle cx="19" cy="12" r="1.5" fill="currentColor" />
-            </svg>
-          </button>
+            {task.title}
+          </p>
 
-          {/* Menu */}
-          {menuOpen && (
-            <div
-              className="absolute right-0 top-full mt-1 z-30 w-48 bg-white dark:bg-gray-900 rounded-lg shadow-xl border border-gray-200 dark:border-gray-800 py-1"
-              onClick={(e) => e.stopPropagation()}
+          {/* ⋯ Menu trigger */}
+          <div ref={menuRef} className="relative flex-shrink-0 -mr-1">
+            <button
+              type="button"
+              onClick={handleMenuButtonClick}
+              onPointerDown={(e) => e.stopPropagation()}
+              className={`
+                p-1 rounded-md
+                text-gray-400 hover:text-gray-700 dark:hover:text-gray-200
+                hover:bg-gray-100 dark:hover:bg-white/[0.06]
+                transition-all duration-150
+                focus:outline-none focus:ring-2 focus:ring-indigo-500/60
+                ${
+                  menuOpen
+                    ? 'opacity-100 bg-gray-100 dark:bg-white/[0.06]'
+                    : 'opacity-0 group-hover:opacity-100 focus:opacity-100'
+                }
+                md:opacity-0 md:group-hover:opacity-100 md:focus:opacity-100
+                max-md:opacity-100
+              `}
+              title="More actions"
+              aria-label="More actions"
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
             >
-              <button
-                type="button"
-                onClick={handleOpenFull}
-                className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
               >
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <path
-                    d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <path d="M14 2v6h6" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-                Open full task
-              </button>
+                <circle cx="5" cy="12" r="1.5" fill="currentColor" />
+                <circle cx="12" cy="12" r="1.5" fill="currentColor" />
+                <circle cx="19" cy="12" r="1.5" fill="currentColor" />
+              </svg>
+            </button>
 
-              <button
-                type="button"
-                onClick={handleAskQuestion}
-                className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-              >
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
+            {/* Menu */}
+            <AnimatePresence>
+              {menuOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: -4, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -4, scale: 0.98 }}
+                  transition={{ duration: 0.14, ease: 'easeOut' }}
+                  className="
+                    absolute right-0 top-0 mt-1.5 z-50
+                    w-48
+                    rounded-xl overflow-hidden
+                    bg-white dark:bg-[#111318]
+                    border border-gray-200 dark:border-white/[0.08]
+                    shadow-xl shadow-black/10 dark:shadow-black/40
+                    py-1
+                    
+                  "
+                  onClick={(e) => e.stopPropagation()}
+                  role="menu"
                 >
-                  <path
-                    d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-                Ask a question
-              </button>
-            </div>
-          )}
+                  <button
+                    type="button"
+                    onClick={handleOpenFull}
+                    className="
+                      w-full flex items-center gap-2.5
+                      px-3 py-2
+                      text-left text-[13px]
+                      text-gray-700 dark:text-gray-300
+                      hover:bg-gray-100 dark:hover:bg-white/[0.05]
+                      transition-colors
+                    "
+                    role="menuitem"
+                  >
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      className="text-gray-400"
+                    >
+                      <path
+                        d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                      <path
+                        d="M14 2v6h6"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                    Open full task
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleAskQuestion}
+                    className="
+                      w-full flex items-center gap-2.5
+                      px-3 py-2
+                      text-left text-[13px]
+                      text-gray-700 dark:text-gray-300
+                      hover:bg-gray-100 dark:hover:bg-white/[0.05]
+                      transition-colors
+                    "
+                    role="menuitem"
+                  >
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      className="text-gray-400"
+                    >
+                      <path
+                        d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                    Ask a question
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
-      </div>
 
-      {/* Labels — dimmed/hidden when DONE */}
-      {task.labels && task.labels.length > 0 && !isDone && (
-        <div className="flex flex-wrap gap-1 mb-2">
-          {task.labels.slice(0, 3).map((label) => (
+        {/* Labels — hidden when DONE */}
+        {task.labels && task.labels.length > 0 && !isDone && (
+          <div className="flex flex-wrap gap-1 mb-2.5">
+            {task.labels.slice(0, 3).map((label) => (
+              <span
+                key={label}
+                className="
+                  text-[10px] font-medium
+                  px-1.5 py-0.5
+                  rounded-md
+                  bg-gray-100 dark:bg-white/[0.06]
+                  text-gray-600 dark:text-gray-400
+                "
+              >
+                {label}
+              </span>
+            ))}
+            {task.labels.length > 3 && (
+              <span
+                className="
+                  text-[10px] font-medium
+                  px-1.5 py-0.5
+                  rounded-md
+                  bg-gray-100 dark:bg-white/[0.06]
+                  text-gray-500 dark:text-gray-500
+                "
+              >
+                +{task.labels.length - 3}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Footer */}
+        <div className="flex items-center gap-2.5 text-[11.5px]">
+          {/* Assignee */}
+          {task.assignee ? (
+            <Avatar
+              name={task.assignee.name}
+              email={task.assignee.email}
+              image={task.assignee.avatarUrl}
+              muted={isDone}
+            />
+          ) : (
             <span
-              key={label}
-              className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400"
+              className={`
+                w-5 h-5 rounded-full border border-dashed flex-shrink-0
+                ${
+                  isDone
+                    ? 'border-gray-200 dark:border-gray-700'
+                    : 'border-gray-300 dark:border-gray-600'
+                }
+              `}
+              title="Unassigned"
+            />
+          )}
+
+          {/* Comment count */}
+          {task.commentCount > 0 && (
+            <span
+              className={`
+                flex items-center gap-1
+                ${
+                  isDone
+                    ? 'text-gray-400 dark:text-gray-600'
+                    : 'text-gray-500 dark:text-gray-400'
+                }
+              `}
+              title={`${task.commentCount} comment${
+                task.commentCount === 1 ? '' : 's'
+              }`}
             >
-              {label}
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+              >
+                <path
+                  d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              {task.commentCount}
             </span>
-          ))}
-          {task.labels.length > 3 && (
-            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-500">
-              +{task.labels.length - 3}
+          )}
+
+          <span className="flex-1" />
+
+          {/* Due date */}
+          {due && !isDone && (
+            <span
+              className={`flex items-center gap-1 text-[11px] ${due.className}`}
+              title={new Date(task.dueDate).toLocaleDateString()}
+            >
+              <svg
+                width="11"
+                height="11"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+              >
+                <rect x="3" y="4" width="18" height="18" rx="2" />
+                <path
+                  d="M16 2v4M8 2v4M3 10h18"
+                  strokeLinecap="round"
+                />
+              </svg>
+              {due.label}
+            </span>
+          )}
+
+          {/* Done badge */}
+          {isDone && (
+            <span className="text-[11px] text-emerald-600 dark:text-emerald-500 flex items-center gap-1 font-medium">
+              <svg
+                width="11"
+                height="11"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="3"
+              >
+                <path
+                  d="M20 6L9 17l-5-5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              Done
             </span>
           )}
         </div>
-      )}
-
-      {/* Footer */}
-      <div className="flex items-center gap-2 text-xs">
-        <span
-          className={`w-2 h-2 rounded-full flex-shrink-0 ${
-            isDone ? 'bg-gray-300 dark:bg-gray-600' : priority.dot
-          }`}
-          title={isDone ? 'Completed' : `Priority: ${priority.label}`}
-        />
-
-        {task.assignee ? (
-          <Avatar
-            name={task.assignee.name}
-            email={task.assignee.email}
-            image={task.assignee.avatarUrl}
-            size="sm"
-            muted={isDone}
-          />
-        ) : (
-          <span
-            className={`w-5 h-5 rounded-full border border-dashed flex-shrink-0 ${
-              isDone
-                ? 'border-gray-200 dark:border-gray-700'
-                : 'border-gray-300 dark:border-gray-700'
-            }`}
-            title="Unassigned"
-          />
-        )}
-
-        {task.commentCount > 0 && (
-          <span
-            className={`flex items-center gap-1 ${
-              isDone
-                ? 'text-gray-400 dark:text-gray-600'
-                : 'text-gray-500 dark:text-gray-400'
-            }`}
-            title={`${task.commentCount} comment${
-              task.commentCount === 1 ? '' : 's'
-            }`}
-          >
-            <svg
-              width="12"
-              height="12"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <path
-                d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-            {task.commentCount}
-          </span>
-        )}
-
-        <span className="flex-1" />
-
-        {due && !isDone && (
-          <span
-            className={`flex items-center gap-1 text-[11px] ${due.className}`}
-            title={new Date(task.dueDate).toLocaleDateString()}
-          >
-            <svg
-              width="11"
-              height="11"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <rect x="3" y="4" width="18" height="18" rx="2" />
-              <path d="M16 2v4M8 2v4M3 10h18" strokeLinecap="round" />
-            </svg>
-            {due.label}
-          </span>
-        )}
-
-        {isDone && (
-          <span className="text-[11px] text-green-600 dark:text-green-500 flex items-center gap-1 font-medium">
-            <svg
-              width="11"
-              height="11"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="3"
-            >
-              <path
-                d="M20 6L9 17l-5-5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-            Done
-          </span>
-        )}
       </div>
     </div>
   );
 };
 
 // =============================================================
-// Avatar
+// Avatar - small avatar or initials
 // =============================================================
-const Avatar = ({ name, email, image, size = 'sm', muted = false }) => {
-  const dim = size === 'sm' ? 'w-5 h-5' : 'w-6 h-6';
-  const textSize = size === 'sm' ? 'text-[9px]' : 'text-[10px]';
-
+const Avatar = ({ name, email, image, muted = false }) => {
   const initials = (name || email || '?')
     .trim()
     .split(/\s+/)
@@ -344,24 +440,28 @@ const Avatar = ({ name, email, image, size = 'sm', muted = false }) => {
     .join('')
     .toUpperCase();
 
-  const mutedClass = muted ? 'opacity-60' : '';
-
   if (image) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img
         src={image}
         alt={name || 'Assignee'}
-        className={`${dim} rounded-full object-cover flex-shrink-0 ${mutedClass}`}
+        title={name || email}
+        className={`
+          w-5 h-5 rounded-full object-cover flex-shrink-0
+          ${muted ? 'opacity-60' : ''}
+        `}
       />
     );
   }
 
   return (
     <div
-      className={`${dim} rounded-full text-white flex items-center justify-center font-semibold flex-shrink-0 ${textSize} ${
-        muted ? 'bg-gray-400 dark:bg-gray-600' : 'bg-indigo-600'
-      }`}
+      className={`
+        w-5 h-5 rounded-full text-white flex items-center justify-center
+        text-[9px] font-semibold flex-shrink-0
+        ${muted ? 'bg-gray-400 dark:bg-gray-600' : 'bg-indigo-600'}
+      `}
       title={name || email}
     >
       {initials}

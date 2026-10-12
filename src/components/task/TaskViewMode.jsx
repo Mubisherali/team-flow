@@ -12,7 +12,7 @@
 // DESIGN GOALS:
 //   - Nothing looks like an input
 //   - Title is the star
-//   - Metadata is scannable, not form-like
+//   - Right rail reads as a metadata panel (subtle framing)
 //   - Plenty of whitespace
 // -------------------------------------------------------------
 
@@ -30,38 +30,64 @@ const TaskViewMode = ({ task }) => {
   const due = dueDateMeta(task.dueDate);
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-[1fr_260px] gap-8 md:gap-12">
-      {/* ─── Main column ─── */}
-      <div className="min-w-0 space-y-6">
+    <div className="grid grid-cols-1 md:grid-cols-[1fr_280px] gap-8 md:gap-12">
+      {/* ══════════ MAIN COLUMN ══════════ */}
+      <div className="min-w-0">
         {/* Title */}
-        <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-gray-900 dark:text-white leading-tight">
+        <h1
+          className="
+            text-[26px] sm:text-3xl font-bold tracking-tight
+            text-gray-900 dark:text-white
+            leading-[1.15]
+            mb-6
+          "
+        >
           {task.title}
         </h1>
 
         {/* Description */}
         <div>
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">
+          <h2 className="text-[10.5px] font-bold uppercase tracking-[0.12em] text-gray-400 dark:text-gray-600 mb-2.5">
             Description
           </h2>
           {task.description && task.description.trim() ? (
-            <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words leading-relaxed">
+            <p
+              className="
+                text-[14px] text-gray-700 dark:text-gray-300
+                whitespace-pre-wrap break-words
+                leading-relaxed
+                max-w-[65ch]
+              "
+            >
               {task.description}
             </p>
           ) : (
-            <p className="text-sm text-gray-400 dark:text-gray-600 italic">
+            <p className="text-[13.5px] text-gray-400 dark:text-gray-600 italic">
               No description
             </p>
           )}
         </div>
       </div>
 
-      {/* ─── Right rail ─── */}
-      <aside className="space-y-5 md:pt-1">
+      {/* ══════════ RIGHT RAIL (metadata panel) ══════════ */}
+      <aside
+        className="
+          space-y-5
+          rounded-2xl
+          border border-gray-200/70 dark:border-white/[0.04]
+          bg-gray-50/50 dark:bg-white/[0.015]
+          p-5
+          md:pt-5
+          h-fit
+        "
+      >
         {/* Status */}
         <ViewField label="Status">
           <div className="flex items-center gap-2">
-            <span className={`w-2 h-2 rounded-full ${statusInfo.dot}`} />
-            <span className="text-sm text-gray-900 dark:text-white">
+            <span
+              className={`w-2 h-2 rounded-full flex-shrink-0 ${statusInfo.dot} ring-2 ring-white dark:ring-[#0f1115]`}
+            />
+            <span className="text-[13px] text-gray-900 dark:text-white">
               {statusInfo.label}
             </span>
           </div>
@@ -70,8 +96,10 @@ const TaskViewMode = ({ task }) => {
         {/* Priority */}
         <ViewField label="Priority">
           <div className="flex items-center gap-2">
-            <span className={`w-2 h-2 rounded-full ${priorityInfo.dot}`} />
-            <span className="text-sm text-gray-900 dark:text-white">
+            <span
+              className={`w-2 h-2 rounded-full flex-shrink-0 ${priorityInfo.dot} ring-2 ring-white dark:ring-[#0f1115]`}
+            />
+            <span className="text-[13px] text-gray-900 dark:text-white">
               {priorityInfo.label}
             </span>
           </div>
@@ -80,28 +108,27 @@ const TaskViewMode = ({ task }) => {
         {/* Assignee */}
         <ViewField label="Assignee">
           {task.assignee ? (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2.5">
               <UserAvatar
                 name={task.assignee.name}
                 email={task.assignee.email}
                 image={task.assignee.avatarUrl}
-                size="sm"
               />
               <div className="min-w-0">
-                <p className="text-sm text-gray-900 dark:text-white truncate">
+                <p className="text-[13px] text-gray-900 dark:text-white truncate">
                   {task.assignee.name || task.assignee.email}
                 </p>
                 {task.assignee.name && task.assignee.email && (
-                  <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                  <p className="text-[11px] text-gray-500 dark:text-gray-500 truncate">
                     {task.assignee.email}
                   </p>
                 )}
               </div>
             </div>
           ) : (
-            <div className="flex items-center gap-2">
-              <span className="w-6 h-6 rounded-full border border-dashed border-gray-300 dark:border-gray-600 flex-shrink-0" />
-              <span className="text-sm text-gray-400 dark:text-gray-500 italic">
+            <div className="flex items-center gap-2.5">
+              <span className="w-6 h-6 rounded-full border border-dashed border-gray-300 dark:border-gray-700 flex-shrink-0" />
+              <span className="text-[13px] text-gray-400 dark:text-gray-500 italic">
                 Unassigned
               </span>
             </div>
@@ -111,9 +138,9 @@ const TaskViewMode = ({ task }) => {
         {/* Due date */}
         <ViewField label="Due date">
           {due ? (
-            <span className={`text-sm ${due.className}`}>{due.label}</span>
+            <span className={`text-[13px] ${due.className}`}>{due.label}</span>
           ) : (
-            <span className="text-sm text-gray-400 dark:text-gray-500 italic">
+            <span className="text-[13px] text-gray-400 dark:text-gray-500 italic">
               No due date
             </span>
           )}
@@ -126,35 +153,42 @@ const TaskViewMode = ({ task }) => {
               {task.labels.map((label) => (
                 <span
                   key={label}
-                  className="text-xs font-medium px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                  className="
+                    text-[11px] font-medium
+                    px-2 py-0.5 rounded-md
+                    bg-white dark:bg-white/[0.06]
+                    border border-gray-200/70 dark:border-white/[0.05]
+                    text-gray-700 dark:text-gray-300
+                  "
                 >
                   {label}
                 </span>
               ))}
             </div>
           ) : (
-            <span className="text-sm text-gray-400 dark:text-gray-500 italic">
+            <span className="text-[13px] text-gray-400 dark:text-gray-500 italic">
               No labels
             </span>
           )}
         </ViewField>
 
-        {/* Divider */}
-        <div className="pt-2 border-t border-gray-200 dark:border-gray-800" />
+        {/* Divider (gradient — softer) */}
+        <div className="h-px bg-gradient-to-r from-transparent via-gray-200 dark:via-white/[0.08] to-transparent my-1" />
 
-        {/* Meta */}
+        {/* Created by */}
         <ViewField label="Created by">
-          <p className="text-sm text-gray-900 dark:text-white">
+          <p className="text-[13px] text-gray-900 dark:text-white">
             {task.createdBy?.name || task.createdBy?.email || 'Unknown'}
           </p>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+          <p className="text-[11px] text-gray-500 dark:text-gray-500 mt-0.5">
             {formatDate(task.createdAt)}
           </p>
         </ViewField>
 
+        {/* Last updated (only when different from created) */}
         {task.updatedAt !== task.createdAt && (
           <ViewField label="Last updated">
-            <p className="text-sm text-gray-900 dark:text-white">
+            <p className="text-[13px] text-gray-900 dark:text-white">
               {formatRelative(task.updatedAt)}
             </p>
           </ViewField>
@@ -169,7 +203,7 @@ const TaskViewMode = ({ task }) => {
 // =============================================================
 const ViewField = ({ label, children }) => (
   <div>
-    <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-500 mb-1.5">
+    <p className="text-[10.5px] font-bold uppercase tracking-[0.12em] text-gray-400 dark:text-gray-600 mb-1.5">
       {label}
     </p>
     {children}
@@ -179,10 +213,7 @@ const ViewField = ({ label, children }) => (
 // =============================================================
 // UserAvatar
 // =============================================================
-const UserAvatar = ({ name, email, image, size = 'sm' }) => {
-  const dim = size === 'sm' ? 'w-6 h-6' : 'w-8 h-8';
-  const textSize = size === 'sm' ? 'text-[10px]' : 'text-xs';
-
+const UserAvatar = ({ name, email, image }) => {
   const initials = (name || email || '?')
     .trim()
     .split(/\s+/)
@@ -197,14 +228,16 @@ const UserAvatar = ({ name, email, image, size = 'sm' }) => {
       <img
         src={image}
         alt={name || 'User'}
-        className={`${dim} rounded-full object-cover flex-shrink-0`}
+        title={name || email}
+        className="w-6 h-6 rounded-full object-cover flex-shrink-0"
       />
     );
   }
 
   return (
     <div
-      className={`${dim} rounded-full bg-indigo-600 text-white flex items-center justify-center font-semibold flex-shrink-0 ${textSize}`}
+      className="w-6 h-6 rounded-full bg-indigo-600 text-white flex items-center justify-center font-semibold flex-shrink-0 text-[10px]"
+      title={name || email}
     >
       {initials}
     </div>

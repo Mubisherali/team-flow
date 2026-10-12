@@ -7,6 +7,8 @@
 //   initialTasks     : array (server-fetched, filtered by parent)
 //   onOpenTask       : (taskId) => void
 //   onAddTask        : (status) => void
+//   onOpenFull       : (taskId) => void
+//   onAskQuestion    : (taskId) => void
 //   currentUserId    : string
 //   currentUserRole  : 'OWNER' | 'MANAGER' | 'MEMBER'
 //
@@ -23,9 +25,9 @@
 //   4. On API error → revert to snapshot + show error
 // -------------------------------------------------------------
 
-"use client";
+'use client';
 
-import { useState, useEffect } from "react";
+import { useState, useEffect } from 'react';
 import {
   DndContext,
   DragOverlay,
@@ -34,17 +36,22 @@ import {
   useSensor,
   useSensors,
   closestCorners,
-} from "@dnd-kit/core";
+} from '@dnd-kit/core';
 import {
   SortableContext,
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
+} from '@dnd-kit/sortable';
+import { motion, AnimatePresence } from 'framer-motion';
 
-import KanbanColumn from "./KanbanColumn";
-import TaskCard from "./TaskCard";
-import { TASK_STATUSES } from "@/lib/task-constants";
-import { groupTasksByStatus, computeReorder, applyUpdates } from "@/lib/kanban";
+import KanbanColumn from './KanbanColumn';
+import TaskCard from './TaskCard';
+import { TASK_STATUSES } from '@/lib/task-constants';
+import {
+  groupTasksByStatus,
+  computeReorder,
+  applyUpdates,
+} from '@/lib/kanban';
 
 const KanbanBoard = ({
   projectId,
@@ -58,7 +65,7 @@ const KanbanBoard = ({
 }) => {
   const [tasks, setTasks] = useState(initialTasks || []);
   const [activeTaskId, setActiveTaskId] = useState(null);
-  const [error, setError] = useState("");
+  const [error, setError] = useState('');
 
   // Sync when the parent re-fetches
   useEffect(() => {
@@ -66,7 +73,7 @@ const KanbanBoard = ({
   }, [initialTasks]);
 
   const isPrivileged =
-    currentUserRole === "OWNER" || currentUserRole === "MANAGER";
+    currentUserRole === 'OWNER' || currentUserRole === 'MANAGER';
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -74,7 +81,7 @@ const KanbanBoard = ({
     }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
-    }),
+    })
   );
 
   const grouped = groupTasksByStatus(tasks);
@@ -83,33 +90,27 @@ const KanbanBoard = ({
     ? tasks.find((t) => t.id === activeTaskId)
     : null;
 
-  // -----------------------------------------------------------
-  // PERMISSION CHECK — mirrors canMoveTaskTo on the server
-  // -----------------------------------------------------------
+  // ─── Permission check ───
   const canMoveTaskTo = (task, newStatus) => {
     if (!task || !newStatus) return false;
-    if (newStatus === task.status) return true; // no-op reorders always fine
+    if (newStatus === task.status) return true;
 
-    // Privileged: any move.
     if (isPrivileged) return true;
 
-    // Members can only move their own tasks.
     const isMyTask =
-      task.assigneeId === currentUserId || task.createdById === currentUserId;
+      task.assigneeId === currentUserId ||
+      task.createdById === currentUserId;
     if (!isMyTask) return false;
 
-    // Members can never move to DONE.
-    if (newStatus === "DONE") return false;
+    if (newStatus === 'DONE') return false;
 
     return true;
   };
 
-  // -----------------------------------------------------------
-  // DRAG HANDLERS
-  // -----------------------------------------------------------
+  // ─── Drag handlers ───
   const handleDragStart = (event) => {
     setActiveTaskId(event.active.id);
-    setError("");
+    setError('');
   };
 
   const handleDragCancel = () => {
@@ -128,17 +129,14 @@ const KanbanBoard = ({
 
     const overId = over.id;
 
-    // ── Resolve the destination column + index ──
     let newStatus;
     let newIndex;
 
-    if (typeof overId === "string" && overId.startsWith("column-")) {
-      // Dropped on column whitespace
-      newStatus = overId.replace("column-", "");
+    if (typeof overId === 'string' && overId.startsWith('column-')) {
+      newStatus = overId.replace('column-', '');
       const destTasks = grouped[newStatus] || [];
       newIndex = destTasks.filter((t) => t.id !== draggedTaskId).length;
     } else {
-      // Dropped on another task card
       const targetTask = tasks.find((t) => t.id === overId);
       if (!targetTask) return;
 
@@ -146,32 +144,26 @@ const KanbanBoard = ({
       const destTasks = grouped[newStatus] || [];
       newIndex = destTasks.findIndex((t) => t.id === overId);
 
-      // If the task is already in the target column and the drop
-      // is a same-position no-op, skip.
       const currentIndex = destTasks.findIndex((t) => t.id === draggedTaskId);
       if (currentIndex === newIndex) return;
     }
 
-    // ── Permission check BEFORE optimistic update ──
     if (!canMoveTaskTo(draggedTask, newStatus)) {
-      if (newStatus === "DONE") {
+      if (newStatus === 'DONE') {
         setError(
-          "Only managers can move tasks to Done. Move it to Review for approval.",
+          'Only managers can move tasks to Done. Move it to Review for approval.'
         );
       } else {
-        setError("You can only move your own tasks.");
+        setError('You can only move your own tasks.');
       }
-      // Auto-clear after a few seconds
-      setTimeout(() => setError(""), 5000);
+      setTimeout(() => setError(''), 5000);
       return;
     }
 
     await performMove(draggedTaskId, newStatus, newIndex);
   };
 
-  // -----------------------------------------------------------
-  // PERFORM MOVE (optimistic + API)
-  // -----------------------------------------------------------
+  // ─── Optimistic move + API ───
   const performMove = async (taskId, newStatus, newIndex) => {
     const snapshot = tasks;
 
@@ -183,66 +175,84 @@ const KanbanBoard = ({
 
     try {
       const res = await fetch(`/api/projects/${projectId}/tasks/reorder`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ taskId, newStatus, newIndex }),
       });
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         setTasks(snapshot);
-        setError(data.error || "Failed to move task");
-        setTimeout(() => setError(""), 5000);
+        setError(data.error || 'Failed to move task');
+        setTimeout(() => setError(''), 5000);
       }
     } catch (err) {
-      console.error("[REORDER_FETCH]", err);
+      console.error('[REORDER_FETCH]', err);
       setTasks(snapshot);
-      setError("Network error. Please try again.");
-      setTimeout(() => setError(""), 5000);
+      setError('Network error. Please try again.');
+      setTimeout(() => setError(''), 5000);
     }
   };
 
-  // -----------------------------------------------------------
-  // RENDER
-  // -----------------------------------------------------------
+  // ─── Render ───
   return (
-    <div className="space-y-3">
-      {error && (
-        <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-900 flex items-start gap-2">
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            className="text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5"
+    <div className="space-y-4">
+      {/* ─── Error banner (animated) ─── */}
+      <AnimatePresence>
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, y: -6, height: 0, marginBottom: 0 }}
+            animate={{ opacity: 1, y: 0, height: 'auto', marginBottom: 0 }}
+            exit={{ opacity: 0, y: -6, height: 0, marginBottom: 0 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
+            className="overflow-hidden"
           >
-            <circle cx="12" cy="12" r="10" />
-            <path d="M12 8v4M12 16h.01" strokeLinecap="round" />
-          </svg>
-          <p className="text-sm text-amber-800 dark:text-amber-200 flex-1">
-            {error}
-          </p>
-          <button
-            onClick={() => setError("")}
-            className="text-amber-600 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-200"
-            aria-label="Dismiss"
-          >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
+            <div
+              className="
+                flex items-start gap-2.5
+                p-3 rounded-xl
+                bg-amber-50 dark:bg-amber-500/10
+                border border-amber-200 dark:border-amber-500/20
+              "
             >
-              <path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" />
-            </svg>
-          </button>
-        </div>
-      )}
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                className="text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5"
+              >
+                <circle cx="12" cy="12" r="10" />
+                <path d="M12 8v4M12 16h.01" strokeLinecap="round" />
+              </svg>
+              <p className="text-[13px] text-amber-800 dark:text-amber-200 flex-1">
+                {error}
+              </p>
+              <button
+                type="button"
+                onClick={() => setError('')}
+                className="text-amber-500 hover:text-amber-700 dark:hover:text-amber-300 flex-shrink-0 transition-colors"
+                aria-label="Dismiss error"
+              >
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                >
+                  <path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" />
+                </svg>
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
+      {/* ─── The board ─── */}
       <DndContext
         sensors={sensors}
         collisionDetection={closestCorners}
@@ -250,7 +260,10 @@ const KanbanBoard = ({
         onDragEnd={handleDragEnd}
         onDragCancel={handleDragCancel}
       >
-        <div className="flex gap-4 overflow-x-auto pb-3">
+        {/* Horizontal scroll container.
+            - pb-3 → room for the horizontal scrollbar
+            - -mx-1 px-1 → subtle bleed so cards don't clip at the edges */}
+        <div className="-mx-1 px-1 flex gap-3 sm:gap-4 overflow-x-auto pb-3">
           {TASK_STATUSES.map((status) => (
             <KanbanColumn
               key={status.value}
@@ -265,17 +278,28 @@ const KanbanBoard = ({
           ))}
         </div>
 
+        {/* ─── Floating drag preview ─── */}
         <DragOverlay dropAnimation={null}>
           {activeTask ? (
-            <div className="rotate-2 opacity-95 shadow-xl">
+            <motion.div
+              initial={{ scale: 1.02, rotate: -1.5 }}
+              animate={{ scale: 1.02, rotate: -1.5 }}
+              className="
+                w-[260px] sm:w-[280px]
+                cursor-grabbing
+                rotate-1
+                opacity-95
+                shadow-2xl shadow-black/20 dark:shadow-black/50
+              "
+            >
               <TaskCard
                 task={activeTask}
                 onOpen={null}
                 onOpenFull={null}
                 onAskQuestion={null}
                 isDragging={false}
-              />{" "}
-            </div>
+              />
+            </motion.div>
           ) : null}
         </DragOverlay>
       </DndContext>

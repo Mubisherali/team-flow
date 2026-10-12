@@ -3,28 +3,20 @@
 // -------------------------------------------------------------
 //
 // PROPS:
-//   task            : the full task object
-//   project         : { id, name }
-//   workspace       : { id, name, slug }
-//   projectMembers  : array
-//   canEdit         : boolean
-//   currentUserId   : string
-//   currentUserRole : 'OWNER' | 'MANAGER' | 'MEMBER'
+//   task / project / workspace / projectMembers
+//   canEdit / currentUserId / currentUserRole
 //
 // MODES:
-//   - view (default): <TaskViewMode> renders read-only
-//   - edit:           <TaskEditMode> renders inputs + Save/Cancel
+//   - view (default): <TaskViewMode>
+//   - edit:           <TaskEditMode> + Save/Cancel
 //
-// FLOW:
-//   1. Click "Edit" → isEditing = true, useTaskEditor begins
-//      tracking local changes
-//   2. In edit mode, edits stay local (no auto-save)
-//   3. Click "Save"  → saveAll() → PATCH → back to view mode
-//   4. Click "Cancel" → resetChanges() → back to view mode
-//      (with confirm if dirty)
-//
-// COMMENTS:
-//   Always rendered below the fields — live in both modes.
+// POLISH:
+//   - Responsive padding
+//   - Framer Motion: mode crossfade, save indicator, error banner,
+//     delete confirmation
+//   - Refined breadcrumb + back link
+//   - Glass dark mode
+//   - Bigger tap targets on actions
 // -------------------------------------------------------------
 
 'use client';
@@ -32,6 +24,7 @@
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { motion, AnimatePresence } from 'framer-motion';
 
 import TaskViewMode from './TaskViewMode';
 import TaskEditMode from './TaskEditMode';
@@ -55,9 +48,7 @@ const TaskPageView = ({
   const router = useRouter();
   const savedTimerRef = useRef(null);
 
-  // ─── Editor hook ───
-  // Always mounted — even in view mode. Ensures the local state
-  // is ready the instant the user clicks Edit.
+  // ─── Editor hook (always mounted) ───
   const editor = useTaskEditor({
     task,
     projectId: project.id,
@@ -65,42 +56,37 @@ const TaskPageView = ({
     canEdit,
     currentUserId,
     currentUserRole,
-    onUpdated: () => {
-      // router.refresh() is called inside the hook already.
-    },
+    onUpdated: () => {},
   });
 
-  // Clear "Saved" indicator after a moment
+  // ─── Clear "Saved" indicator after a moment ───
   useEffect(() => {
     if (editor.saveState === 'saved') {
-      savedTimerRef.current = setTimeout(() => editor.setSaveState('idle'), 1500);
+      savedTimerRef.current = setTimeout(
+        () => editor.setSaveState('idle'),
+        1500
+      );
       return () => clearTimeout(savedTimerRef.current);
     }
   }, [editor.saveState]);
 
-  // Escape cancels edit mode (with confirm if dirty)
+  // ─── Escape cancels edit mode ───
   useEffect(() => {
     if (!isEditing) return;
-
     const handleKey = (e) => {
-      if (e.key === 'Escape') {
-        handleCancel();
-      }
+      if (e.key === 'Escape') handleCancel();
     };
-
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
   }, [isEditing, editor.isDirty]);
 
-  // Warn before closing tab while in edit mode with changes
+  // ─── Warn before closing tab while dirty ───
   useEffect(() => {
     if (!isEditing || !editor.isDirty) return;
-
     const handler = (e) => {
       e.preventDefault();
       e.returnValue = '';
     };
-
     window.addEventListener('beforeunload', handler);
     return () => window.removeEventListener('beforeunload', handler);
   }, [isEditing, editor.isDirty]);
@@ -116,14 +102,11 @@ const TaskPageView = ({
     if (result.ok) {
       setIsEditing(false);
     }
-    // If error, stay in edit mode — the hook already set saveError
   };
 
   const handleCancel = () => {
     if (editor.isDirty) {
-      const confirmed = confirm(
-        'You have unsaved changes. Discard them?'
-      );
+      const confirmed = confirm('You have unsaved changes. Discard them?');
       if (!confirmed) return;
     }
     editor.resetChanges();
@@ -160,37 +143,38 @@ const TaskPageView = ({
   const statusInfo = statusMeta(task.status);
   const isSaving = editor.saveState === 'saving';
 
+  // ─── Render ───
   return (
-    <div className="p-8 max-w-4xl mx-auto">
-      {/* ─── Breadcrumb ─── */}
-      <nav className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 mb-6 flex-wrap">
+    <div className="p-5 sm:p-8 max-w-4xl mx-auto">
+      {/* ══════════ BREADCRUMB + BACK ══════════ */}
+      <nav className="flex items-center gap-2 text-[12.5px] text-gray-500 dark:text-gray-500 mb-4 flex-wrap">
         <Link
           href={`/workspaces/${workspace.id}`}
           className="hover:text-gray-900 dark:hover:text-white transition-colors"
         >
           {workspace.name}
         </Link>
-        <span>/</span>
+        <span className="text-gray-300 dark:text-gray-700">/</span>
         <Link
           href={`/workspaces/${workspace.id}/projects/${project.id}`}
-          className="hover:text-gray-900 dark:hover:text-white transition-colors"
+          className="hover:text-gray-900 dark:hover:text-white transition-colors truncate max-w-[160px] sm:max-w-none"
         >
           {project.name}
         </Link>
       </nav>
 
-      {/* ─── Back link ─── */}
       <Link
         href={`/workspaces/${workspace.id}/projects/${project.id}`}
-        className="inline-flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white mb-6 transition-colors"
+        className="group inline-flex items-center gap-1.5 text-[12.5px] text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white mb-6 transition-colors"
       >
         <svg
-          width="14"
-          height="14"
+          width="13"
+          height="13"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
           strokeWidth="2"
+          className="transition-transform duration-150 group-hover:-translate-x-0.5"
         >
           <path
             d="M19 12H5M12 19l-7-7 7-7"
@@ -201,33 +185,42 @@ const TaskPageView = ({
         Back to board
       </Link>
 
-      {/* ─── Top bar: status + actions ─── */}
+      {/* ══════════ TOP BAR: STATUS + ACTIONS ══════════ */}
       <div className="flex items-center justify-between gap-4 mb-6 flex-wrap">
-        <div className="flex items-center gap-2">
+        {/* Status + Save indicator */}
+        <div className="flex items-center gap-2.5">
           <span className={`w-2 h-2 rounded-full ${statusInfo.dot}`} />
-          <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
+          <span className="text-[12.5px] font-medium text-gray-500 dark:text-gray-400">
             {statusInfo.label}
           </span>
 
-          {editor.saveState === 'saved' && (
-            <span className="flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500 ml-2">
-              <svg
-                width="11"
-                height="11"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="3"
+          <AnimatePresence>
+            {editor.saveState === 'saved' && (
+              <motion.span
+                initial={{ opacity: 0, x: -4 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -4 }}
+                transition={{ duration: 0.15 }}
+                className="flex items-center gap-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-500 ml-1"
               >
-                <path
-                  d="M20 6L9 17l-5-5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-              Saved
-            </span>
-          )}
+                <svg
+                  width="11"
+                  height="11"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="3"
+                >
+                  <path
+                    d="M20 6L9 17l-5-5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+                Saved
+              </motion.span>
+            )}
+          </AnimatePresence>
         </div>
 
         {/* Actions */}
@@ -237,7 +230,16 @@ const TaskPageView = ({
               <button
                 type="button"
                 onClick={handleStartEdit}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                className="
+                  inline-flex items-center gap-1.5
+                  px-3.5 py-2 rounded-xl
+                  border border-gray-200 dark:border-white/[0.08]
+                  text-[13px] font-medium
+                  text-gray-700 dark:text-gray-300
+                  hover:bg-gray-50 dark:hover:bg-white/[0.04]
+                  active:scale-[0.98]
+                  transition-all duration-150
+                "
               >
                 <svg
                   width="13"
@@ -245,7 +247,7 @@ const TaskPageView = ({
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
-                  strokeWidth="2"
+                  strokeWidth="1.8"
                 >
                   <path
                     d="M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"
@@ -261,7 +263,16 @@ const TaskPageView = ({
                   type="button"
                   onClick={handleCancel}
                   disabled={isSaving}
-                  className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 transition-colors"
+                  className="
+                    px-3.5 py-2 rounded-xl
+                    border border-gray-200 dark:border-white/[0.08]
+                    text-[13px] font-medium
+                    text-gray-700 dark:text-gray-300
+                    hover:bg-gray-50 dark:hover:bg-white/[0.04]
+                    active:scale-[0.98]
+                    disabled:opacity-50
+                    transition-all duration-150
+                  "
                 >
                   Cancel
                 </button>
@@ -269,7 +280,15 @@ const TaskPageView = ({
                   type="button"
                   onClick={handleSave}
                   disabled={isSaving || !editor.isDirty}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 dark:disabled:bg-gray-700 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors"
+                  className="
+                    inline-flex items-center gap-1.5
+                    px-3.5 py-2 rounded-xl
+                    bg-indigo-600 hover:bg-indigo-700
+                    disabled:bg-gray-300 dark:disabled:bg-gray-700 disabled:cursor-not-allowed
+                    active:scale-[0.98]
+                    text-white text-[13px] font-medium
+                    transition-all duration-150
+                  "
                 >
                   {isSaving ? (
                     <>
@@ -284,7 +303,7 @@ const TaskPageView = ({
                         viewBox="0 0 24 24"
                         fill="none"
                         stroke="currentColor"
-                        strokeWidth="2"
+                        strokeWidth="1.8"
                       >
                         <path
                           d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"
@@ -307,31 +326,96 @@ const TaskPageView = ({
         )}
       </div>
 
-      {/* ─── Error banner ─── */}
-      {editor.saveError && (
-        <div className="mb-6 p-3 rounded-lg bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-900">
-          <p className="text-sm text-red-700 dark:text-red-300">
-            {editor.saveError}
-          </p>
-        </div>
-      )}
-
-      {/* ─── Main content card ─── */}
-      <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-6 md:p-8 mb-10">
-        {isEditing ? (
-          <TaskEditMode
-            task={task}
-            editor={editor}
-            projectMembers={projectMembers}
-            currentUserId={currentUserId}
-            canEdit={canEdit}
-          />
-        ) : (
-          <TaskViewMode task={task} />
+      {/* ══════════ ERROR BANNER ══════════ */}
+      <AnimatePresence>
+        {editor.saveError && (
+          <motion.div
+            initial={{ opacity: 0, height: 0, marginBottom: 0 }}
+            animate={{ opacity: 1, height: 'auto', marginBottom: 24 }}
+            exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+            transition={{ duration: 0.15 }}
+            className="overflow-hidden"
+          >
+            <div className="flex items-start gap-2.5 p-3 rounded-xl bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20">
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                className="text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5"
+              >
+                <circle cx="12" cy="12" r="10" />
+                <path d="M12 8v4M12 16h.01" strokeLinecap="round" />
+              </svg>
+              <p className="text-[13px] text-red-700 dark:text-red-300 flex-1">
+                {editor.saveError}
+              </p>
+              <button
+                type="button"
+                onClick={() => editor.setSaveError('')}
+                className="text-red-500 hover:text-red-700 dark:hover:text-red-300 flex-shrink-0 transition-colors"
+                aria-label="Dismiss error"
+              >
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                >
+                  <path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" />
+                </svg>
+              </button>
+            </div>
+          </motion.div>
         )}
+      </AnimatePresence>
+
+      {/* ══════════ MAIN CONTENT CARD ══════════ */}
+      <div
+        className="
+          rounded-2xl
+          border border-gray-200 dark:border-white/[0.06]
+          bg-white dark:bg-white/[0.02]
+          p-6 md:p-8
+          mb-8
+        "
+      >
+        <AnimatePresence mode="wait" initial={false}>
+          {isEditing ? (
+            <motion.div
+              key="edit"
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.15, ease: 'easeOut' }}
+            >
+              <TaskEditMode
+                task={task}
+                editor={editor}
+                projectMembers={projectMembers}
+                currentUserId={currentUserId}
+                canEdit={canEdit}
+              />
+            </motion.div>
+          ) : (
+            <motion.div
+              key="view"
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.15, ease: 'easeOut' }}
+            >
+              <TaskViewMode task={task} />
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
-      {/* ─── Discussion ─── */}
+      {/* ══════════ DISCUSSION ══════════ */}
       <div id="comments" className="scroll-mt-4 mb-10">
         <CommentList
           projectId={project.id}
@@ -341,18 +425,27 @@ const TaskPageView = ({
         />
       </div>
 
-      {/* ─── Danger zone ─── */}
+      {/* ══════════ DANGER ZONE ══════════ */}
       {canEdit && (
         <section>
-          <h2 className="text-base font-semibold text-red-600 dark:text-red-400 mb-3">
+          <h2 className="text-[15px] font-semibold text-red-600 dark:text-red-400 mb-3">
             Danger zone
           </h2>
-          <div className="rounded-xl border border-red-200 dark:border-red-900 bg-red-50/50 dark:bg-red-950/30 p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div
+            className="
+              rounded-2xl
+              border border-red-200 dark:border-red-500/20
+              bg-red-50/50 dark:bg-red-500/[0.04]
+              p-5
+              flex flex-col sm:flex-row sm:items-center sm:justify-between
+              gap-4
+            "
+          >
             <div>
-              <p className="text-sm font-medium text-gray-900 dark:text-white">
+              <p className="text-[13.5px] font-medium text-gray-900 dark:text-white">
                 Delete this task
               </p>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
+              <p className="text-[12.5px] text-gray-600 dark:text-gray-400 mt-0.5">
                 This action cannot be undone.
               </p>
             </div>
@@ -360,7 +453,15 @@ const TaskPageView = ({
               type="button"
               onClick={() => setShowDeleteConfirm(true)}
               disabled={isDeleting}
-              className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white text-sm font-medium transition-colors self-start sm:self-auto"
+              className="
+                px-4 py-2 rounded-xl
+                bg-red-600 hover:bg-red-700
+                disabled:bg-red-400 disabled:cursor-not-allowed
+                active:scale-[0.98]
+                text-white text-[13px] font-medium
+                transition-all duration-150
+                self-start sm:self-auto
+              "
             >
               Delete task
             </button>
@@ -368,34 +469,62 @@ const TaskPageView = ({
         </section>
       )}
 
-      {/* ─── Delete confirmation overlay ─── */}
-      {showDeleteConfirm && (
-        <DeleteConfirmOverlay
-          taskTitle={task.title}
-          loading={isDeleting}
-          onCancel={() => setShowDeleteConfirm(false)}
-          onConfirm={handleDelete}
-        />
-      )}
+      {/* ══════════ DELETE CONFIRM MODAL ══════════ */}
+      <AnimatePresence>
+        {showDeleteConfirm && (
+          <DeleteConfirmModal
+            key="delete-confirm"
+            taskTitle={task.title}
+            loading={isDeleting}
+            onCancel={() => setShowDeleteConfirm(false)}
+            onConfirm={handleDelete}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 };
 
 // =============================================================
-// DeleteConfirmOverlay
+// DeleteConfirmModal - full-screen confirmation
 // =============================================================
-const DeleteConfirmOverlay = ({ taskTitle, loading, onCancel, onConfirm }) => (
-  <div
-    className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+const DeleteConfirmModal = ({
+  taskTitle,
+  loading,
+  onCancel,
+  onConfirm,
+}) => (
+  <motion.div
+    initial={{ opacity: 0 }}
+    animate={{ opacity: 1 }}
+    exit={{ opacity: 0 }}
+    transition={{ duration: 0.15 }}
+    className="
+      fixed inset-0 z-50
+      flex items-center justify-center p-4
+      bg-black/50 dark:bg-black/70 backdrop-blur-sm
+    "
     onClick={() => !loading && onCancel()}
   >
-    <div
-      className="w-full max-w-sm bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-800"
+    <motion.div
+      initial={{ opacity: 0, scale: 0.96, y: 8 }}
+      animate={{ opacity: 1, scale: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.97, y: 4 }}
+      transition={{ duration: 0.18, ease: 'easeOut' }}
+      className="
+        w-full max-w-sm
+        bg-white dark:bg-[#0f1115]
+        rounded-2xl
+        border border-gray-200 dark:border-white/[0.08]
+        shadow-2xl shadow-black/20 dark:shadow-black/60
+      "
       onClick={(e) => e.stopPropagation()}
+      role="dialog"
+      aria-modal="true"
     >
       <div className="p-6">
         <div className="text-center">
-          <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-red-100 dark:bg-red-950 flex items-center justify-center">
+          <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-red-100 dark:bg-red-500/15 flex items-center justify-center">
             <svg
               width="20"
               height="20"
@@ -412,33 +541,60 @@ const DeleteConfirmOverlay = ({ taskTitle, loading, onCancel, onConfirm }) => (
               />
             </svg>
           </div>
-          <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-1">
+          <h3 className="text-[15px] font-semibold text-gray-900 dark:text-white mb-1">
             Delete this task?
           </h3>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
+          <p className="text-[13px] text-gray-600 dark:text-gray-400 mb-6 leading-relaxed">
             &ldquo;{taskTitle}&rdquo; will be permanently removed. This cannot
             be undone.
           </p>
         </div>
+
         <div className="flex gap-3">
           <button
+            type="button"
             onClick={onCancel}
             disabled={loading}
-            className="flex-1 py-2.5 rounded-lg border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 font-medium hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 transition-colors"
+            className="
+              flex-1 py-2.5 rounded-xl
+              border border-gray-300 dark:border-white/[0.08]
+              text-gray-700 dark:text-gray-300
+              text-[13px] font-medium
+              hover:bg-gray-50 dark:hover:bg-white/[0.04]
+              active:scale-[0.98]
+              disabled:opacity-50
+              transition-all duration-150
+            "
           >
             Cancel
           </button>
           <button
+            type="button"
             onClick={onConfirm}
             disabled={loading}
-            className="flex-1 py-2.5 rounded-lg bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white font-medium transition-colors"
+            className="
+              flex-1 py-2.5 rounded-xl
+              bg-red-600 hover:bg-red-700
+              disabled:bg-red-400 disabled:cursor-not-allowed
+              active:scale-[0.98]
+              text-white text-[13px] font-medium
+              transition-all duration-150
+              flex items-center justify-center gap-2
+            "
           >
-            {loading ? 'Deleting...' : 'Delete'}
+            {loading ? (
+              <>
+                <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                Deleting…
+              </>
+            ) : (
+              'Delete'
+            )}
           </button>
         </div>
       </div>
-    </div>
-  </div>
+    </motion.div>
+  </motion.div>
 );
 
 export default TaskPageView;

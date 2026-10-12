@@ -3,31 +3,45 @@
 // -------------------------------------------------------------
 //
 // PROPS:
-//   editor        : the object returned by useTaskEditor (owned by TaskPageView)
-//   projectMembers: array — for the assignee dropdown
-//   currentUserId : string
-//   canEdit       : boolean
+//   task, editor, projectMembers, currentUserId, canEdit
 //
 // DIFFERENCE FROM TaskFields (modal):
 //   TaskFields auto-saves each field on blur/change.
-//   TaskEditMode does NOT save — it just renders inputs and
-//   updates the editor's local state. The parent's Save button
-//   commits everything at once.
-//
-//   Both use the SAME editor object, so validation and workflow
-//   rules are identical.
+//   TaskEditMode does NOT save — it renders inputs and updates
+//   the editor's local state. The parent's Save button commits.
 //
 // LAYOUT:
-//   Same two-column layout as TaskViewMode.
-//   Left: title + description (as inputs)
-//   Right: status / priority / assignee / due date / labels
+//   Same two-column layout as TaskViewMode:
+//     Left: title + description (as inputs)
+//     Right: metadata panel with inputs
+//
+// POLISH:
+//   - Refined inputs (rounded-xl + hover + smooth focus)
+//   - Framed metadata panel (matches TaskViewMode)
+//   - Top-level React imports (no more require('react'))
+//   - Consistent typography
 // -------------------------------------------------------------
 
 'use client';
 
-import { useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 
 import { TASK_PRIORITIES } from '@/lib/task-constants';
+
+// -------------------------------------------------------------
+// INPUT STYLES
+// -------------------------------------------------------------
+const inputBase = `
+  w-full px-3.5 py-2.5 rounded-xl text-sm
+  border bg-white dark:bg-white/[0.03]
+  text-gray-900 dark:text-white
+  placeholder-gray-400 dark:placeholder-gray-500
+  focus:outline-none focus:ring-2 focus:ring-indigo-500/60 focus:border-indigo-500
+  transition-all duration-200
+  disabled:opacity-60 disabled:cursor-not-allowed
+`;
+const inputNormal =
+  'border-gray-200 dark:border-white/[0.08] hover:border-gray-300 dark:hover:border-white/[0.12]';
 
 const TaskEditMode = ({
   task,
@@ -58,21 +72,16 @@ const TaskEditMode = ({
     isPrivileged,
   } = editor;
 
-  // Assignees the current user can pick from
+  // Assignable members
   const assignableMembers = useMemo(() => {
     if (!projectMembers) return [];
     if (isPrivileged) return projectMembers;
     return projectMembers.filter((m) => m.userId === currentUserId);
   }, [isPrivileged, projectMembers, currentUserId]);
 
-  // Local-only label handlers — no API call
-  const onAddLabel = () => {
-    handleAddLabel();
-  };
-
-  const onRemoveLabel = (label) => {
-    handleRemoveLabel(label);
-  };
+  // ─── Label handlers (local only — no API) ───
+  const onAddLabel = () => handleAddLabel();
+  const onRemoveLabel = (label) => handleRemoveLabel(label);
 
   const onLabelKeyDown = (e) => {
     if (e.key === 'Enter' || e.key === ',') {
@@ -84,26 +93,35 @@ const TaskEditMode = ({
   };
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-[1fr_260px] gap-8 md:gap-12">
-      {/* ─── Main column ─── */}
-      <div className="min-w-0 space-y-6">
-        {/* Title */}
-        <div>
-          <input
-            type="text"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            disabled={!canEdit}
-            maxLength={150}
-            placeholder="Task title"
-            autoFocus
-            className="w-full px-0 py-1 bg-transparent text-2xl md:text-3xl font-bold tracking-tight text-gray-900 dark:text-white placeholder-gray-400 border-0 border-b-2 border-gray-200 dark:border-gray-800 focus:border-indigo-500 focus:outline-none focus:ring-0 transition-colors disabled:opacity-70"
-          />
-        </div>
+    <div className="grid grid-cols-1 md:grid-cols-[1fr_280px] gap-8 md:gap-12">
+      {/* ══════════ MAIN COLUMN ══════════ */}
+      <div className="min-w-0">
+        {/* Title — clean underline input, larger text */}
+        <input
+          type="text"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          disabled={!canEdit}
+          maxLength={150}
+          placeholder="Task title"
+          autoFocus
+          className="
+            w-full bg-transparent
+            text-[26px] sm:text-3xl font-bold tracking-tight
+            text-gray-900 dark:text-white
+            placeholder-gray-400 dark:placeholder-gray-600
+            leading-[1.15]
+            border-0 border-b-2 border-gray-200 dark:border-white/[0.08]
+            focus:border-indigo-500 focus:outline-none focus:ring-0
+            transition-colors duration-200
+            pb-3 mb-6
+            disabled:opacity-70
+          "
+        />
 
         {/* Description */}
         <div>
-          <label className="block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">
+          <label className="block text-[10.5px] font-bold uppercase tracking-[0.12em] text-gray-400 dark:text-gray-600 mb-2.5">
             Description
           </label>
           <textarea
@@ -112,14 +130,23 @@ const TaskEditMode = ({
             disabled={!canEdit}
             rows={8}
             maxLength={2000}
-            placeholder="Add a description..."
-            className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-y text-sm leading-relaxed disabled:opacity-70"
+            placeholder="Add a description…"
+            className={`${inputBase} ${inputNormal} resize-y leading-relaxed`}
           />
         </div>
       </div>
 
-      {/* ─── Right rail ─── */}
-      <aside className="space-y-5 md:pt-1">
+      {/* ══════════ RIGHT RAIL (metadata panel) ══════════ */}
+      <aside
+        className="
+          space-y-5
+          rounded-2xl
+          border border-gray-200/70 dark:border-white/[0.04]
+          bg-gray-50/50 dark:bg-white/[0.015]
+          p-5
+          h-fit
+        "
+      >
         {/* Status */}
         <EditField label="Status">
           <select
@@ -131,7 +158,7 @@ const TaskEditMode = ({
                 ? 'You cannot change the status of this task'
                 : undefined
             }
-            className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-70 disabled:cursor-not-allowed"
+            className={`${inputBase} ${inputNormal}`}
           >
             <option value={status}>
               {currentStatusMeta?.label || status}
@@ -149,12 +176,12 @@ const TaskEditMode = ({
             status !== 'DONE' &&
             availableStatuses.some((s) => s.value === 'REVIEW') &&
             status !== 'REVIEW' && (
-              <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">
+              <p className="text-[11px] text-gray-500 dark:text-gray-500 mt-1.5 leading-relaxed">
                 Move to Review to request approval before Done.
               </p>
             )}
           {!isPrivileged && status === 'REVIEW' && (
-            <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1">
+            <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1.5 leading-relaxed">
               Awaiting manager approval.
             </p>
           )}
@@ -166,7 +193,7 @@ const TaskEditMode = ({
             value={priority}
             onChange={(e) => handleSelectChange('priority', e.target.value)}
             disabled={!canEdit}
-            className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-70"
+            className={`${inputBase} ${inputNormal}`}
           >
             {TASK_PRIORITIES.map((p) => (
               <option key={p.value} value={p.value}>
@@ -194,7 +221,7 @@ const TaskEditMode = ({
             value={dueDate}
             onChange={handleDueDateChange}
             disabled={!canEdit}
-            className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-70"
+            className={`${inputBase} ${inputNormal}`}
           />
         </EditField>
 
@@ -205,13 +232,25 @@ const TaskEditMode = ({
               {labels.map((label) => (
                 <span
                   key={label}
-                  className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                  className="
+                    inline-flex items-center gap-1
+                    text-[11px] font-medium
+                    px-2 py-0.5 rounded-md
+                    bg-white dark:bg-white/[0.06]
+                    border border-gray-200/70 dark:border-white/[0.05]
+                    text-gray-700 dark:text-gray-300
+                  "
                 >
                   {label}
                   <button
                     type="button"
                     onClick={() => onRemoveLabel(label)}
-                    className="text-gray-400 hover:text-gray-700 dark:hover:text-white"
+                    className="
+                      text-gray-400 hover:text-gray-700 dark:hover:text-white
+                      transition-colors
+                      focus:outline-none focus:text-gray-700
+                    "
+                    aria-label={`Remove label ${label}`}
                   >
                     <svg
                       width="10"
@@ -238,15 +277,16 @@ const TaskEditMode = ({
             placeholder="Type and press Enter to add"
             maxLength={24}
             disabled={!canEdit}
-            className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm disabled:opacity-70"
+            className={`${inputBase} ${inputNormal}`}
           />
         </EditField>
 
-        {/* Meta (read-only info, still visible in edit mode) */}
-        <div className="pt-2 border-t border-gray-200 dark:border-gray-800" />
+        {/* Divider (gradient) */}
+        <div className="h-px bg-gradient-to-r from-transparent via-gray-200 dark:via-white/[0.08] to-transparent my-1" />
 
+        {/* Created by (read-only) */}
         <EditField label="Created by">
-          <p className="text-sm text-gray-900 dark:text-white">
+          <p className="text-[13px] text-gray-900 dark:text-white">
             {task.createdBy?.name || task.createdBy?.email || 'Unknown'}
           </p>
         </EditField>
@@ -256,11 +296,11 @@ const TaskEditMode = ({
 };
 
 // =============================================================
-// EditField - label + input pair
+// EditField
 // =============================================================
 const EditField = ({ label, children }) => (
   <div>
-    <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-500 mb-1.5">
+    <p className="text-[10.5px] font-bold uppercase tracking-[0.12em] text-gray-400 dark:text-gray-600 mb-1.5">
       {label}
     </p>
     {children}
@@ -271,10 +311,10 @@ const EditField = ({ label, children }) => (
 // AssigneeSelect - rich dropdown with avatars
 // =============================================================
 const AssigneeSelect = ({ value, members, currentUserId, disabled, onChange }) => {
-  const [open, setOpen] = require('react').useState(false);
-  const wrapRef = require('react').useRef(null);
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef(null);
 
-  require('react').useEffect(() => {
+  useEffect(() => {
     if (!open) return;
     const handler = (e) => {
       if (wrapRef.current && !wrapRef.current.contains(e.target)) {
@@ -285,7 +325,7 @@ const AssigneeSelect = ({ value, members, currentUserId, disabled, onChange }) =
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
-  require('react').useEffect(() => {
+  useEffect(() => {
     if (!open) return;
     const handler = (e) => {
       if (e.key === 'Escape') setOpen(false);
@@ -303,11 +343,15 @@ const AssigneeSelect = ({ value, members, currentUserId, disabled, onChange }) =
 
   return (
     <div className="relative" ref={wrapRef}>
+      {/* Trigger */}
       <button
         type="button"
         onClick={() => !disabled && setOpen((v) => !v)}
         disabled={disabled}
-        className="w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-left text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-70 disabled:cursor-not-allowed transition-colors"
+        className={`
+          ${inputBase} ${inputNormal}
+          flex items-center gap-2 text-left
+        `}
       >
         {selected ? (
           <>
@@ -315,13 +359,12 @@ const AssigneeSelect = ({ value, members, currentUserId, disabled, onChange }) =
               name={selected.name}
               email={selected.email}
               image={selected.avatarUrl}
-              size="sm"
             />
             <span className="flex-1 min-w-0 truncate text-gray-900 dark:text-white">
               {selected.name || selected.email}
             </span>
             {selected.userId === currentUserId && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 flex-shrink-0">
+              <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-gray-100 dark:bg-white/[0.06] text-gray-600 dark:text-gray-400 flex-shrink-0">
                 YOU
               </span>
             )}
@@ -347,16 +390,32 @@ const AssigneeSelect = ({ value, members, currentUserId, disabled, onChange }) =
         </svg>
       </button>
 
+      {/* Menu */}
       {open && (
-        <div className="absolute top-full left-0 right-0 mt-1 z-30 bg-white dark:bg-gray-900 rounded-lg shadow-xl border border-gray-200 dark:border-gray-800 max-h-64 overflow-y-auto">
+        <div
+          className="
+            absolute top-full left-0 right-0 mt-1 z-30
+            max-h-64 overflow-y-auto
+            rounded-xl
+            bg-white dark:bg-[#111318]
+            border border-gray-200 dark:border-white/[0.08]
+            shadow-xl shadow-black/10 dark:shadow-black/40
+            py-1
+          "
+        >
+          {/* Unassigned */}
           <button
             type="button"
             onClick={() => handleSelect('')}
-            className={`w-full flex items-center gap-2 px-3 py-2 text-left text-sm transition-colors ${
-              !value
-                ? 'bg-indigo-50 dark:bg-indigo-950'
-                : 'hover:bg-gray-50 dark:hover:bg-gray-800'
-            }`}
+            className={`
+              w-full flex items-center gap-2.5 px-3 py-2 text-left text-[13px]
+              transition-colors
+              ${
+                !value
+                  ? 'bg-indigo-50 dark:bg-indigo-500/10'
+                  : 'hover:bg-gray-50 dark:hover:bg-white/[0.04]'
+              }
+            `}
           >
             <span className="w-5 h-5 rounded-full border border-dashed border-gray-300 dark:border-gray-600 flex-shrink-0" />
             <span className="text-gray-500 dark:text-gray-400">
@@ -365,9 +424,10 @@ const AssigneeSelect = ({ value, members, currentUserId, disabled, onChange }) =
           </button>
 
           {members.length > 0 && (
-            <div className="border-t border-gray-200 dark:border-gray-800" />
+            <div className="border-t border-gray-100 dark:border-white/[0.06] my-1" />
           )}
 
+          {/* Members */}
           {members.map((m) => {
             const isSelected = m.userId === value;
             const isMe = m.userId === currentUserId;
@@ -376,30 +436,33 @@ const AssigneeSelect = ({ value, members, currentUserId, disabled, onChange }) =
                 key={m.userId}
                 type="button"
                 onClick={() => handleSelect(m.userId)}
-                className={`w-full flex items-center gap-2 px-3 py-2 text-left text-sm transition-colors ${
-                  isSelected
-                    ? 'bg-indigo-50 dark:bg-indigo-950'
-                    : 'hover:bg-gray-50 dark:hover:bg-gray-800'
-                }`}
+                className={`
+                  w-full flex items-center gap-2.5 px-3 py-2 text-left
+                  transition-colors
+                  ${
+                    isSelected
+                      ? 'bg-indigo-50 dark:bg-indigo-500/10'
+                      : 'hover:bg-gray-50 dark:hover:bg-white/[0.04]'
+                  }
+                `}
               >
                 <UserAvatar
                   name={m.name}
                   email={m.email}
                   image={m.avatarUrl}
-                  size="sm"
                 />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                  <p className="text-[13px] font-medium text-gray-900 dark:text-white truncate">
                     {m.name || m.email}
                   </p>
                   {m.name && m.email && (
-                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                    <p className="text-[11px] text-gray-500 dark:text-gray-500 truncate">
                       {m.email}
                     </p>
                   )}
                 </div>
                 {isMe && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 flex-shrink-0">
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-gray-100 dark:bg-white/[0.06] text-gray-600 dark:text-gray-400 flex-shrink-0">
                     YOU
                   </span>
                 )}
@@ -432,10 +495,7 @@ const AssigneeSelect = ({ value, members, currentUserId, disabled, onChange }) =
 // =============================================================
 // UserAvatar
 // =============================================================
-const UserAvatar = ({ name, email, image, size = 'sm' }) => {
-  const dim = size === 'sm' ? 'w-6 h-6' : 'w-8 h-8';
-  const textSize = size === 'sm' ? 'text-[10px]' : 'text-xs';
-
+const UserAvatar = ({ name, email, image }) => {
   const initials = (name || email || '?')
     .trim()
     .split(/\s+/)
@@ -450,14 +510,16 @@ const UserAvatar = ({ name, email, image, size = 'sm' }) => {
       <img
         src={image}
         alt={name || 'User'}
-        className={`${dim} rounded-full object-cover flex-shrink-0`}
+        title={name || email}
+        className="w-5 h-5 rounded-full object-cover flex-shrink-0"
       />
     );
   }
 
   return (
     <div
-      className={`${dim} rounded-full bg-indigo-600 text-white flex items-center justify-center font-semibold flex-shrink-0 ${textSize}`}
+      className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center font-semibold flex-shrink-0 text-[9px]"
+      title={name || email}
     >
       {initials}
     </div>
