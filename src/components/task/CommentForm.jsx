@@ -2,20 +2,29 @@
 // CommentForm - Compose a new comment on a task
 // -------------------------------------------------------------
 //
-// PROPS:
-//   onSubmit : (content) => Promise<void>
-//   disabled : boolean — parent may lock the form while another
-//              request is in flight (rarely used)
+// WHEN USED:
+//   Rendered at the bottom of <CommentList>. One instance per
+//   task thread.
 //
-// BEHAVIOR:
-//   - Auto-growing textarea (1 → 6 rows)
-//   - Post button disabled while empty or saving
-//   - Ctrl/Cmd + Enter submits
-//   - Clears on success
+// STRUCTURE:
+//   Bordered composer
+//     - Auto-growing textarea
+//     - Footer (hint / counter left, submit button right)
 //
-// AUTOSAVE MODEL:
-//   Unlike task fields (save on blur), comments save on Submit.
-//   A comment is a discrete action, not a field being tuned.
+// POLISH:
+//   - Focus ring matches TaskDetailModal (indigo, soft glow)
+//   - Auto-grow preserved (1 → ~6 rows)
+//   - Ctrl/Cmd+Enter submits
+//   - Live character counter near limit (≤200)
+//   - Screen-reader live region for errors
+//   - Submit button mirrors modal's primary button style
+//   - Send icon matches Wave-2 stroke weight
+//
+// PRESERVED:
+//   - Same props (onSubmit, disabled)
+//   - Same MAX_LENGTH (2000)
+//   - Same soft over-typing cap (MAX + 100)
+//   - Same save-on-submit model
 // -------------------------------------------------------------
 
 'use client';
@@ -34,7 +43,9 @@ const CommentForm = ({ onSubmit, disabled }) => {
   const trimmedLength = content.trim().length;
   const canSubmit = trimmedLength > 0 && !submitting && !disabled;
 
-  // Auto-size the textarea to fit content (capped at ~6 rows visually)
+  // -----------------------------------------------------------
+  // AUTO-GROW
+  // -----------------------------------------------------------
   const autoSize = (el) => {
     if (!el) return;
     el.style.height = 'auto';
@@ -42,6 +53,9 @@ const CommentForm = ({ onSubmit, disabled }) => {
     el.style.height = Math.min(el.scrollHeight, 200) + 'px';
   };
 
+  // -----------------------------------------------------------
+  // HANDLERS
+  // -----------------------------------------------------------
   const handleChange = (e) => {
     setContent(e.target.value);
     autoSize(e.target);
@@ -79,15 +93,24 @@ const CommentForm = ({ onSubmit, disabled }) => {
 
   const remaining = MAX_LENGTH - content.length;
   const overLimit = remaining < 0;
+  const nearLimit = content.length > 0 && remaining <= 200 && !overLimit;
 
+  // -----------------------------------------------------------
+  // RENDER
+  // -----------------------------------------------------------
   return (
     <div className="space-y-2">
+      {/* ─── Composer surface ─── */}
       <div
-        className={`rounded-xl border transition-colors ${
-          error
-            ? 'border-red-300 dark:border-red-900'
-            : 'border-gray-300 dark:border-gray-700 focus-within:border-indigo-500 dark:focus-within:border-indigo-600'
-        } bg-white dark:bg-gray-800`}
+        className={`
+          rounded-xl border transition-all duration-150
+          bg-white dark:bg-white/[0.03]
+          ${
+            error || overLimit
+              ? 'border-red-300 dark:border-red-500/40'
+              : 'border-gray-200 dark:border-white/[0.08] focus-within:border-indigo-500 dark:focus-within:border-indigo-500/60 focus-within:ring-2 focus-within:ring-indigo-500/20'
+          }
+        `}
       >
         <textarea
           ref={textareaRef}
@@ -98,26 +121,47 @@ const CommentForm = ({ onSubmit, disabled }) => {
           maxLength={MAX_LENGTH + 100 /* soft cap for over-typing */}
           placeholder="Write a comment…"
           disabled={submitting || disabled}
-          className="w-full px-3 py-2.5 bg-transparent text-sm text-gray-900 dark:text-white placeholder-gray-400 rounded-xl focus:outline-none resize-none disabled:opacity-60"
+          aria-label="Write a comment"
+          className="
+            w-full px-3.5 py-3
+            bg-transparent
+            text-[13px] text-gray-900 dark:text-white
+            placeholder-gray-400 dark:placeholder-gray-500
+            rounded-xl
+            focus:outline-none
+            resize-none
+            disabled:opacity-60
+          "
         />
       </div>
 
-      {/* Footer: hint left, actions right */}
+      {/* ─── Footer: hint left, actions right ─── */}
       <div className="flex items-center justify-between gap-2 min-h-[28px]">
-        <div className="text-[11px] text-gray-500 dark:text-gray-400">
+        {/* Left: hint / error / counter */}
+        <div className="text-[11px] text-gray-500 dark:text-gray-400 min-w-0 truncate">
           {error ? (
-            <span className="text-red-600 dark:text-red-400">{error}</span>
+            <span
+              className="text-red-600 dark:text-red-400"
+              role="alert"
+              aria-live="polite"
+            >
+              {error}
+            </span>
           ) : overLimit ? (
-            <span className="text-red-600 dark:text-red-400">
+            <span
+              className="text-red-600 dark:text-red-400"
+              role="alert"
+              aria-live="polite"
+            >
               {Math.abs(remaining)} over limit
             </span>
           ) : (
             <>
-              <kbd className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-[10px] font-mono">
+              <kbd className="px-1 py-0.5 rounded bg-gray-100 dark:bg-white/[0.06] text-[10px] font-mono">
                 Ctrl
               </kbd>
               {' + '}
-              <kbd className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-[10px] font-mono">
+              <kbd className="px-1 py-0.5 rounded bg-gray-100 dark:bg-white/[0.06] text-[10px] font-mono">
                 Enter
               </kbd>
               {' to post'}
@@ -125,17 +169,32 @@ const CommentForm = ({ onSubmit, disabled }) => {
           )}
         </div>
 
-        <div className="flex items-center gap-2">
-          {content.length > 0 && remaining <= 200 && !overLimit && (
-            <span className="text-[11px] text-gray-500 dark:text-gray-400">
+        {/* Right: counter + submit */}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {nearLimit && (
+            <span
+              className="text-[11px] text-gray-500 dark:text-gray-400 tabular-nums"
+              aria-live="polite"
+            >
               {remaining} left
             </span>
           )}
+
           <button
             type="button"
             onClick={handleSubmit}
             disabled={!canSubmit || overLimit}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 dark:disabled:bg-gray-700 disabled:cursor-not-allowed text-white text-xs font-medium transition-colors"
+            className="
+              inline-flex items-center gap-1.5
+              px-3.5 py-1.5 rounded-lg
+              bg-indigo-600 hover:bg-indigo-700
+              disabled:bg-gray-200 dark:disabled:bg-white/[0.06]
+              disabled:text-gray-400 dark:disabled:text-gray-500
+              disabled:cursor-not-allowed
+              active:scale-[0.98]
+              text-white text-[12px] font-medium
+              transition-all duration-150
+            "
           >
             {submitting ? (
               <>
@@ -151,6 +210,7 @@ const CommentForm = ({ onSubmit, disabled }) => {
                   fill="none"
                   stroke="currentColor"
                   strokeWidth="2.5"
+                  aria-hidden="true"
                 >
                   <path
                     d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"

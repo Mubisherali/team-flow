@@ -2,21 +2,35 @@
 // CommentList - Comments section for a task
 // -------------------------------------------------------------
 //
-// VISUAL:
-//   Reads like an inbox — a title bar with count, comments
-//   stacked with dividers, and a composer at the bottom.
+// WHEN USED:
+//   Rendered inside <TaskDetailModal> (below the task fields)
+//   and on the full task page.
 //
-// BEHAVIOR:
-//   - Fetches comments on mount and when taskId changes
-//   - Add/edit/delete update local state after the API responds
-//   - Auto-scrolls to the newest comment on mount + after post
-//   - Renders <CommentItem> for each comment
-//   - Renders <CommentForm> at the bottom
+// STRUCTURE:
+//   Section card
+//     - Header (icon + "Discussion" + count)
+//     - Body (loading | error | list | empty)
+//     - Composer footer (<CommentForm>)
+//
+// POLISH:
+//   - Framer Motion entry on section
+//   - Newly-added comments fade in (initial load is instant)
+//   - Semantic <ul>/<li> for the thread
+//   - Glass red error surface
+//   - Count badge reserves space (no layout shift)
+//   - aria-labelledby for screen readers
+//
+// PRESERVED:
+//   - Same props
+//   - Same fetch + cancel pattern
+//   - Same handlers (add / edit / delete)
+//   - Auto-scroll to newest on mount + after post
 // -------------------------------------------------------------
 
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 import CommentItem from './CommentItem';
 import CommentForm from './CommentForm';
@@ -30,6 +44,11 @@ const CommentList = ({
   const [comments, setComments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
+  // IDs of comments that were added *after* the initial load.
+  // Only these get a Framer Motion entrance — the first paint
+  // of the thread is instant (calm, no stagger on 50 comments).
+  const [animatedIds, setAnimatedIds] = useState(() => new Set());
 
   const bottomRef = useRef(null);
 
@@ -72,14 +91,14 @@ const CommentList = ({
   }, [projectId, taskId]);
 
   // -----------------------------------------------------------
-  // AUTO-SCROLL on load
+  // AUTO-SCROLL on initial load
   // -----------------------------------------------------------
   useEffect(() => {
     if (!loading && bottomRef.current) {
       requestAnimationFrame(() => {
         bottomRef.current?.scrollIntoView({
           behavior: 'auto',
-          block: 'nearest',
+          block: 'end',
         });
       });
     }
@@ -104,12 +123,21 @@ const CommentList = ({
         throw new Error(data.error || 'Failed to post comment');
       }
 
-      setComments((prev) => [...prev, data.comment]);
+      const newComment = data.comment;
+
+      // Mark this id as "animate on enter" before rendering it.
+      setAnimatedIds((prev) => {
+        const next = new Set(prev);
+        next.add(newComment.id);
+        return next;
+      });
+
+      setComments((prev) => [...prev, newComment]);
 
       requestAnimationFrame(() => {
         bottomRef.current?.scrollIntoView({
           behavior: 'smooth',
-          block: 'nearest',
+          block: 'end',
         });
       });
     },
@@ -151,7 +179,7 @@ const CommentList = ({
         `/api/projects/${projectId}/tasks/${taskId}/comments/${commentId}`,
         { method: 'DELETE' }
       );
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
         throw new Error(data.error || 'Failed to delete comment');
@@ -169,11 +197,33 @@ const CommentList = ({
   const hasComments = count > 0;
 
   return (
-    <section className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-hidden">
-      {/* ─── Section header ─── */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-800">
-        <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-lg bg-indigo-50 dark:bg-indigo-950 flex items-center justify-center">
+    <motion.section
+      initial={{ opacity: 0, y: 4 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.2, ease: 'easeOut' }}
+      aria-labelledby="comments-heading"
+      className="
+        rounded-2xl overflow-hidden
+        border border-gray-200 dark:border-white/[0.08]
+        bg-white dark:bg-[#0f1115]
+      "
+    >
+      {/* ══════════ HEADER ══════════ */}
+      <div
+        className="
+          flex items-center justify-between
+          px-5 py-4
+          border-b border-gray-200 dark:border-white/[0.06]
+        "
+      >
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div
+            className="
+              w-7 h-7 rounded-lg flex-shrink-0
+              bg-indigo-50 dark:bg-indigo-500/10
+              flex items-center justify-center
+            "
+          >
             <svg
               width="14"
               height="14"
@@ -191,54 +241,103 @@ const CommentList = ({
             </svg>
           </div>
 
-          <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
+          <h3
+            id="comments-heading"
+            className="text-[13px] font-semibold text-gray-900 dark:text-white truncate"
+          >
             Discussion
           </h3>
 
-          {!loading && hasComments && (
-            <span className="text-xs font-medium px-1.5 py-0.5 rounded-md bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
-              {count}
-            </span>
-          )}
+          {/* Count badge — always rendered (opacity toggles) so
+              the header doesn't shift when loading → loaded. */}
+          <span
+            aria-hidden={!hasComments || loading}
+            className={`
+              text-[11px] font-medium px-1.5 py-0.5 rounded-md
+              bg-gray-100 dark:bg-white/[0.06]
+              text-gray-600 dark:text-gray-400
+              transition-opacity duration-150
+              ${!loading && hasComments ? 'opacity-100' : 'opacity-0'}
+            `}
+          >
+            {count}
+          </span>
         </div>
       </div>
 
-      {/* ─── Error ─── */}
+      {/* ══════════ ERROR ══════════ */}
       {error && (
-        <div className="m-6 p-3 rounded-lg bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-900">
-          <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
+        <div className="m-4 sm:m-5">
+          <div
+            className="
+              rounded-xl px-3.5 py-3
+              bg-red-500/[0.07] dark:bg-red-500/10
+              border border-red-500/20
+            "
+            role="alert"
+          >
+            <p className="text-[12.5px] text-red-700 dark:text-red-300">
+              {error}
+            </p>
+          </div>
         </div>
       )}
 
-      {/* ─── Body ─── */}
+      {/* ══════════ BODY ══════════ */}
       {loading ? (
         <LoadingComments />
       ) : (
         <>
-          {/* Comments */}
           {hasComments ? (
-            <div className="divide-y divide-gray-100 dark:divide-gray-800/60">
-              {comments.map((c) => (
-                <div key={c.id} className="px-6 py-5">
-                  <CommentItem
-                    comment={c}
-                    currentUserId={currentUserId}
-                    currentUserRole={currentUserRole}
-                    onEdit={handleEdit}
-                    onDelete={handleDelete}
-                  />
-                </div>
-              ))}
-            </div>
+            <ul role="list" className="divide-y divide-gray-100 dark:divide-white/[0.06]">
+              <AnimatePresence initial={false}>
+                {comments.map((c) => {
+                  const shouldAnimate = animatedIds.has(c.id);
+                  return (
+                    <li key={c.id}>
+                      {shouldAnimate ? (
+                        <motion.div
+                          initial={{ opacity: 0, y: 6 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 0.22, ease: 'easeOut' }}
+                          className="px-5 py-4"
+                        >
+                          <CommentItem
+                            comment={c}
+                            currentUserId={currentUserId}
+                            currentUserRole={currentUserRole}
+                            onEdit={handleEdit}
+                            onDelete={handleDelete}
+                          />
+                        </motion.div>
+                      ) : (
+                        <div className="px-5 py-4">
+                          <CommentItem
+                            comment={c}
+                            currentUserId={currentUserId}
+                            currentUserRole={currentUserRole}
+                            onEdit={handleEdit}
+                            onDelete={handleDelete}
+                          />
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
+              </AnimatePresence>
+            </ul>
           ) : (
             <EmptyComments />
           )}
 
-          {/* Divider before composer */}
-          <div className="border-t border-gray-200 dark:border-gray-800" />
-
           {/* Composer */}
-          <div className="p-6 bg-gray-50/50 dark:bg-gray-900/50">
+          <div
+            className="
+              p-5
+              border-t border-gray-200 dark:border-white/[0.06]
+              bg-gray-50/60 dark:bg-white/[0.015]
+            "
+          >
             <CommentForm onSubmit={handleAdd} />
           </div>
         </>
@@ -246,7 +345,7 @@ const CommentList = ({
 
       {/* Invisible scroll anchor */}
       <div ref={bottomRef} />
-    </section>
+    </motion.section>
   );
 };
 
@@ -255,7 +354,13 @@ const CommentList = ({
 // =============================================================
 const LoadingComments = () => (
   <div className="flex items-center justify-center py-12">
-    <span className="w-5 h-5 border-2 border-gray-300 dark:border-gray-700 border-t-gray-500 dark:border-t-gray-400 rounded-full animate-spin" />
+    <span
+      className="
+        w-5 h-5 rounded-full animate-spin
+        border-2 border-gray-300 dark:border-white/10
+        border-t-gray-500 dark:border-t-gray-400
+      "
+    />
   </div>
 );
 
@@ -263,8 +368,19 @@ const LoadingComments = () => (
 // EmptyComments
 // =============================================================
 const EmptyComments = () => (
-  <div className="py-12 text-center">
-    <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+  <motion.div
+    initial={{ opacity: 0, y: 4 }}
+    animate={{ opacity: 1, y: 0 }}
+    transition={{ duration: 0.25, ease: 'easeOut' }}
+    className="py-12 text-center"
+  >
+    <div
+      className="
+        w-12 h-12 mx-auto mb-3 rounded-full
+        bg-gray-100 dark:bg-white/[0.04]
+        flex items-center justify-center
+      "
+    >
       <svg
         width="20"
         height="20"
@@ -281,13 +397,13 @@ const EmptyComments = () => (
         />
       </svg>
     </div>
-    <p className="text-sm font-medium text-gray-900 dark:text-white mb-1">
+    <p className="text-[13px] font-medium text-gray-900 dark:text-white mb-1">
       No comments yet
     </p>
-    <p className="text-xs text-gray-500 dark:text-gray-400">
+    <p className="text-[12px] text-gray-500 dark:text-gray-400">
       Start the discussion below.
     </p>
-  </div>
+  </motion.div>
 );
 
 export default CommentList;

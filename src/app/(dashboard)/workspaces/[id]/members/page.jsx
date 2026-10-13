@@ -2,6 +2,8 @@
 // Members Page - /workspaces/[id]/members
 // -------------------------------------------------------------
 //
+// URL: /workspaces/:id/members
+//
 // SERVER COMPONENT:
 //   - Auth check
 //   - Verify user is a member of the workspace
@@ -14,8 +16,20 @@
 //     ├─ fetch members (sorted by role priority)
 //     ├─ fetch pending invitations (only if owner/manager)
 //     └─ render:
-//         ├─ <MembersListClient>          (File 13)
-//         └─ <PendingInvitationsList>     (File 14)
+//         ├─ <MembersListClient>
+//         └─ <PendingInvitationsList>
+//
+// POLISH:
+//   - Tighter type scale (Wave-3)
+//   - Back link + focus ring
+//   - Section landmarks (aria-labelledby)
+//   - A11y: aria-hidden on decorative SVGs
+//
+// PRESERVED:
+//   - Same server logic (auth → membership → fetch)
+//   - Role-weighted member sort + join-date tiebreak
+//   - Pending invitations fetched only for owner/manager
+//   - Invite link building server-side
 // -------------------------------------------------------------
 
 import { notFound, redirect } from 'next/navigation';
@@ -83,8 +97,8 @@ export default async function MembersPage({ params }) {
       return new Date(a.joinedAt) - new Date(b.joinedAt);
     })
     .map((m) => ({
-      id: m.id, // membership id
-      userId: m.user.id, // user id
+      id: m.id,
+      userId: m.user.id,
       name: m.user.name,
       email: m.user.email,
       avatarUrl: m.user.avatarUrl,
@@ -119,11 +133,19 @@ export default async function MembersPage({ params }) {
 
   // ─── Step 6: Render ───
   return (
-    <div className="p-8 max-w-4xl mx-auto">
-      {/* Back link */}
+    <div className="p-6 sm:p-8 max-w-4xl mx-auto">
+      {/* ══════════ BACK LINK ══════════ */}
       <Link
         href={`/workspaces/${workspaceId}`}
-        className="inline-flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white mb-6 transition-colors"
+        className="
+          inline-flex items-center gap-1.5 mb-6
+          text-[13px] font-medium
+          text-gray-600 dark:text-gray-400
+          hover:text-gray-900 dark:hover:text-white
+          focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40
+          rounded
+          transition-colors duration-150
+        "
       >
         <svg
           width="14"
@@ -131,7 +153,8 @@ export default async function MembersPage({ params }) {
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
-          strokeWidth="2"
+          strokeWidth="1.8"
+          aria-hidden="true"
         >
           <path
             d="M19 12H5M12 19l-7-7 7-7"
@@ -142,19 +165,19 @@ export default async function MembersPage({ params }) {
         Back to workspace
       </Link>
 
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+      {/* ══════════ HEADER ══════════ */}
+      <header className="mb-8">
+        <h1 className="text-[17px] font-semibold tracking-tight text-gray-900 dark:text-white">
           Team
         </h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+        <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-1">
           {workspace.name} ·{' '}
-          <span className="font-mono">/{workspace.slug}</span>
+          <span className="font-mono text-[12.5px]">/{workspace.slug}</span>
         </p>
-      </div>
+      </header>
 
-      {/* ─── Members section ─── */}
-      <section className="mb-10">
+      {/* ══════════ MEMBERS ══════════ */}
+      <section aria-label="Members" className="mb-10">
         <MembersListClient
           workspaceId={workspaceId}
           currentUserId={session.user.id}
@@ -163,14 +186,17 @@ export default async function MembersPage({ params }) {
         />
       </section>
 
-      {/* ─── Pending invitations (owner/manager only) ─── */}
+      {/* ══════════ PENDING INVITATIONS ══════════ */}
       {canInviteMembers(role) && (
-        <section>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+        <section aria-labelledby="pending-invites-heading">
+          <div className="flex items-center justify-between gap-3 mb-4">
+            <h2
+              id="pending-invites-heading"
+              className="text-[15px] font-semibold tracking-tight text-gray-900 dark:text-white"
+            >
               Pending invitations
             </h2>
-            <span className="text-xs text-gray-500 dark:text-gray-400">
+            <span className="text-[12.5px] font-medium text-gray-500 dark:text-gray-400">
               {pendingInvitations.length} pending
             </span>
           </div>

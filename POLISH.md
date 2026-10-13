@@ -24,51 +24,56 @@ For each file, do ALL of these in one pass:
 
 ---
 
-## 🌊 Wave 1 — Core Navigation & Auth
+## 🌊 Wave 1 — Core Navigation & Auth ✅ DONE
 
-- [ ] `src/app/(auth)/login/page.jsx` — **← CURRENT**
-- [ ] `src/app/(auth)/register/page.jsx`
-- [ ] `src/app/page.jsx` (public landing)
-- [ ] `src/components/workspace/WorkspaceListClient.jsx`
-- [ ] `src/app/(dashboard)/workspaces/page.jsx`
-
----
-
-## 🌊 Wave 2 — Kanban Experience
-
-- [ ] `src/components/task/TaskCard.jsx`
-- [ ] `src/components/task/KanbanColumn.jsx`
-- [ ] `src/components/task/KanbanBoard.jsx`
-- [ ] `src/components/task/TaskDetailModal.jsx`
-- [ ] `src/components/task/CreateTaskModal.jsx`
-- [ ] `src/components/task/TaskPageView.jsx`
-- [ ] `src/components/task/TaskViewMode.jsx`
-- [ ] `src/components/task/TaskEditMode.jsx`
-- [ ] `src/components/task/TaskFields.jsx`
+- [x] `src/app/(auth)/login/page.jsx`
+- [x] `src/app/(auth)/register/page.jsx`
+- [x] `src/app/page.jsx` (public landing)
+- [x] `src/components/workspace/WorkspaceListClient.jsx`
+- [x] `src/app/(dashboard)/workspaces/page.jsx`
 
 ---
 
-## 🌊 Wave 3 — Collaboration
+## 🌊 Wave 2 — Kanban Experience ✅ DONE
 
-- [ ] `src/components/task/CommentList.jsx`
-- [ ] `src/components/task/CommentItem.jsx`
-- [ ] `src/components/task/CommentForm.jsx`
-- [ ] `src/components/workspace/InviteMemberModal.jsx`
-- [ ] `src/components/workspace/MembersListClient.jsx`
-- [ ] `src/app/invite/[token]/page.jsx`
+- [x] `src/components/task/TaskCard.jsx`
+- [x] `src/components/task/KanbanColumn.jsx`
+- [x] `src/components/task/KanbanBoard.jsx`
+- [x] `src/components/task/TaskDetailModal.jsx`
+- [x] `src/components/task/CreateTaskModal.jsx`
+- [x] `src/components/task/TaskPageView.jsx`
+- [x] `src/components/task/TaskViewMode.jsx`
+- [x] `src/components/task/TaskEditMode.jsx`
+- [x] `src/components/task/TaskFields.jsx`
 
 ---
 
-## 🌊 Wave 4 — Workspaces & Projects
+## 🌊 Wave 3 — Collaboration ✅ DONE
 
-- [ ] `src/app/(dashboard)/workspaces/[id]/page.jsx`
+- [x] `src/components/task/CommentList.jsx`
+- [x] `src/components/task/CommentItem.jsx`
+- [x] `src/components/task/CommentForm.jsx`
+- [x] `src/components/workspace/InviteMemberModal.jsx`
+- [x] `src/components/workspace/MembersListClient.jsx`
+- [x] `src/components/workspace/PendingInvitationsList.jsx`
+- [x] `src/components/workspace/AcceptInvitationButton.jsx`
+- [x] `src/app/invite/[token]/page.jsx`
+
+*(Note: Wave 3 in the original brief listed 6 files. Two more were
+added during polish — `PendingInvitationsList.jsx` and
+`AcceptInvitationButton.jsx` — because both are direct companions
+to `MembersListClient.jsx` and share its visual language.)*
+
+---
+
+## 🌊 Wave 4 — Workspaces & Projects ← CURRENT
+
+- [ ] `src/app/(dashboard)/workspaces/[id]/page.jsx` — **← NEXT**
 - [ ] `src/app/(dashboard)/workspaces/[id]/settings/page.jsx`
 - [ ] `src/app/(dashboard)/workspaces/[id]/members/page.jsx`
 - [ ] `src/components/workspace/CreateWorkspaceModal.jsx`
-- [ ] `src/components/workspace/PendingInvitationsList.jsx`
 - [ ] `src/components/workspace/WorkspaceSettingsForm.jsx`
 - [ ] `src/components/workspace/DeleteWorkspaceButton.jsx`
-- [ ] `src/components/workspace/ManageMembersButton.jsx`
 - [ ] `src/components/project/ProjectCard.jsx`
 - [ ] `src/components/project/ProjectsSection.jsx`
 - [ ] `src/components/project/CreateProjectModal.jsx`
@@ -91,7 +96,6 @@ For each file, do ALL of these in one pass:
 - [ ] `src/components/settings/ConnectedAccounts.jsx`
 - [ ] `src/components/settings/DeleteAccountButton.jsx`
 - [ ] `src/components/settings/SettingsNav.jsx`
-- [ ] `src/components/workspace/AcceptInvitationButton.jsx`
 
 ---
 
@@ -143,33 +147,51 @@ Use these as your reference.
 - **Card padding:** `p-5` or `p-6`
 
 ### Typography Hierarchy
-- **Page title:** `text-2xl font-bold`
-- **Section title:** `text-lg font-semibold`
-- **Card title:** `text-sm font-semibold`
-- **Body:** `text-sm`
-- **Muted text:** `text-xs text-gray-500 dark:text-gray-400`
-- **Label:** `text-xs font-semibold uppercase tracking-wide`
+- **Page title:** `text-[17px] font-semibold tracking-tight` (top-level page h1)
+- **Modal / section title:** `text-[15px] font-semibold tracking-tight`
+- **Card title:** `text-[13px] font-semibold`
+- **Body:** `text-[13px]`
+- **Small body:** `text-[12.5px]`
+- **Tiny / meta:** `text-[12px]`
+- **Micro / badges:** `text-[11px]` or `text-[10px]`
+- **Muted text:** `text-gray-500 dark:text-gray-400`
 
 ### Colors
-- **Primary:** indigo-600
-- **Success:** emerald-600
-- **Warning:** amber-600
-- **Danger:** red-600
-- **Surface:** white / gray-50 (light) · gray-900 / #0b0d12 (dark)
-- **Border:** gray-200 (light) / white/[0.06] (dark)
+- **Primary:** `indigo-600` (hover `indigo-700`, disabled `indigo-400` / `dark:indigo-800`)
+- **Success / positive:** `emerald-600`
+- **Warning:** `amber-600`
+- **Danger:** `red-600` (dark hover `red-400`)
+- **Page background (light):** `gray-50`
+- **Page background (dark):** `#0b0d12`
+- **Card surface (light):** `white`
+- **Card / modal surface (dark):** `#0f1115`
+- **Inner bubble (dark):** `white/[0.03]`
+- **Border (light):** `gray-200`
+- **Border (dark, cards):** `white/[0.08]`
+- **Divider (dark):** `white/[0.06]`
+- **Glass error:** `bg-red-500/[0.07] dark:bg-red-500/10 border-red-500/20`
+- **Glass warning:** `bg-amber-500/[0.07] dark:bg-amber-500/10 border-amber-500/20`
+- **Glass success:** `bg-emerald-500/10 dark:bg-emerald-500/15`
+- **Glass info:** `bg-indigo-500/[0.07] dark:bg-indigo-500/10 border-indigo-500/20`
 
 ### Motion
+- **Backdrop fade:** `duration: 0.18, ease: 'easeOut'`
+- **Modal card:** `duration: 0.2, ease: 'easeOut'`, `initial={{ opacity: 0, scale: 0.96, y: 8 }}`
+- **Inner crossfade (state swap):** `duration: 0.22, ease: 'easeOut'`, `mode="wait"`
+- **Small element fade:** `duration: 0.15-0.18`
 - **Hover transitions:** `duration-150` or `duration-200`
-- **Modal enter/exit:** 200-250ms, ease-out
-- **Dropdown open/close:** 150-200ms
-- **Page transitions:** 200ms fade
 - **Easing:** `ease-out` for enters, `ease-in` for exits
 
 ### Micro-interactions
-- **Buttons:** hover state + active scale (`active:scale-[0.98]`)
+- **Primary / secondary buttons:** `active:scale-[0.98]` + `transition-all duration-150`
+- **Icon buttons:** `p-2 rounded-lg active:scale-[0.96]` + `transition-all duration-150`
 - **Cards:** hover shadow + border color change
 - **Links:** hover color change
-- **Focus:** visible ring (`focus:ring-2 focus:ring-indigo-500`)
+- **Focus (buttons/links):** `focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40`
+- **Focus (inputs):** `focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 dark:focus:border-indigo-500/60`
+- **Disabled:** `disabled:opacity-50 disabled:cursor-not-allowed`
+- **Icon buttons hover surface:** `hover:bg-gray-100 dark:hover:bg-white/[0.06]`
+- **Danger icon button:** `hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10`
 
 ### Responsive Breakpoints
 - **Mobile:** `< 640px`
@@ -181,18 +203,60 @@ Use these as your reference.
 
 ## ✅ Notes / Decisions Log
 
-Use this section to track decisions made during polish.
+- **[2026-10-11]** Sidebar redesign completed. Off-canvas drawer on mobile,
+  top bar with hamburger/brand/bell/avatar. Bell hidden in drawer on mobile
+  (uses top bar).
 
-- **[2026-10-11]** Sidebar redesign completed. Off-canvas drawer on mobile, top bar with hamburger/brand/bell/avatar. Bell hidden in drawer on mobile (uses top bar).
+- **[2026-10-13]** Wave 3 (Collaboration) completed. Key decisions:
+  - **Dark mode:** system-preference only (no manual toggle).
+  - **Comment rows:** no hover on rows (they aren't clickable). Only the
+    action buttons inside get hover.
+  - **Comment animations:** only newly-posted comments animate in — initial
+    load is instant (calm, no stagger on large threads).
+  - **Delete confirmations:** inline two-button swap inside `CommentItem`,
+    NOT native `confirm()`. `MembersListClient` and `PendingInvitationsList`
+    use Framer Motion modals matching `DeleteConfirmOverlay`.
+  - **`formatRelative`:** kept custom helper in `CommentItem.jsx` (not
+    `date-fns`), per project convention.
+  - **Row hover:** members & pending-invite rows DO get subtle hover
+    (`hover:bg-gray-50/60 dark:hover:bg-white/[0.02]`) — they contain
+    actionable controls.
+  - **Workspace avatar on `/invite/[token]`:** kept indigo→purple gradient
+    + inner ring (it's the only gradient in the app; acceptable as a
+    "welcome" moment).
 
-- *(add more as we go)*
+- **[2026-10-13]** File count rebalanced. Original Wave 3 had 6 files.
+  Added `PendingInvitationsList.jsx` and `AcceptInvitationButton.jsx`
+  because they share the MembersList visual language and were polished
+  together. Total: 54 → 56 files.
 
 ---
 
 ## 🎯 Progress
 
-**Files polished:** 1 / 54
+**Files polished:** 21 / 56
 
-**Next up:** `src/app/(auth)/login/page.jsx`
+**Waves complete:** 1, 2, 3
 
-**Current session goal:** Finish Wave 1 (5 files)
+**Next up:** `src/app/(dashboard)/workspaces/[id]/page.jsx`
+
+**Current session goal:** Start Wave 4 — Workspaces & Projects (17 files)
+
+---
+
+## 🧭 Known Future Refactors (not now — post-launch)
+
+- **Confirm modal duplication.** Three nearly identical confirm modals
+  exist: `DeleteConfirmOverlay` (in `TaskDetailModal`),
+  `RemoveConfirmModal` (in `MembersListClient`),
+  `ConfirmRevokeModal` (in `PendingInvitationsList`). Extract into a
+  shared `<ConfirmModal />` component after polish is complete.
+
+- **`src/proxy.js` dead code.** The top ~70 lines are a commented-out
+  older version. Remove before launch.
+
+- **`layout.js` metadata.** `description` still says "Generated by create
+  next app". Replace with real copy before launch.
+
+- **No `src/app/api/auth/[...nextauth]/route.js`** visible in tree.
+  Verify NextAuth mount point before launch.

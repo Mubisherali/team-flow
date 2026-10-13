@@ -2,24 +2,37 @@
 // CommentItem - Single comment in a task's thread
 // -------------------------------------------------------------
 //
-// VISUAL STYLE:
-//   Each comment is rendered as a soft card — a subtle gray
-//   container with rounded corners. Name + time at the top,
-//   content below. Actions (edit/delete) sit in the top-right
-//   on hover. This is the "inbox" look — organized, scannable,
-//   like emails in a thread.
+// WHEN USED:
+//   Rendered by <CommentList> for every comment in the thread.
 //
-// PROPS:
-//   comment         : { id, user, content, createdAt, updatedAt, isEdited }
-//   currentUserId   : string
-//   currentUserRole : 'OWNER' | 'MANAGER' | 'MEMBER'
-//   onEdit          : (commentId, newContent) => Promise<void>
-//   onDelete        : (commentId) => Promise<void>
+// STRUCTURE:
+//   Avatar | Body
+//            - Header (name · relative time · (edited) · actions)
+//            - Content bubble (view mode)  OR
+//              Edit textarea (edit mode)   OR
+//              Delete confirm swap (delete mode)
+//
+// POLISH:
+//   - Framer Motion crossfade between view/edit modes
+//   - Inline delete confirm (no native confirm())
+//   - Icon buttons match TaskDetailModal style
+//   - Actions fade in on hover (desktop) and stay visible
+//     on touch (mobile) via group-focus-within
+//   - Refined avatar with subtle ring
+//   - A11y labels on all icon buttons
+//
+// PRESERVED:
+//   - Same props
+//   - Same state machine (editing / saving / deleting)
+//   - Ctrl/Cmd+Enter saves, Esc cancels
+//   - Custom formatRelative helper (no date-fns drift)
+//   - Permission logic (isAuthor / isPrivileged)
 // -------------------------------------------------------------
 
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 const MAX_LENGTH = 2000;
 
@@ -31,6 +44,7 @@ const CommentItem = ({
   onDelete,
 }) => {
   const [editing, setEditing] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [draft, setDraft] = useState(comment.content);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -56,6 +70,9 @@ const CommentItem = ({
       el.focus();
       el.style.height = 'auto';
       el.style.height = el.scrollHeight + 'px';
+      // Place cursor at end
+      const len = el.value.length;
+      el.setSelectionRange(len, len);
     }
   }, [editing]);
 
@@ -128,58 +145,79 @@ const CommentItem = ({
   };
 
   // -----------------------------------------------------------
-  // DELETE
+  // DELETE — inline confirm (no native confirm())
   // -----------------------------------------------------------
-  const handleDelete = async () => {
-    if (!confirm('Delete this comment?')) return;
-
+  const handleConfirmDelete = async () => {
     setDeleting(true);
     setError('');
     try {
       await onDelete(comment.id);
+      // Parent removes this item — no need to reset deleting.
     } catch (err) {
       setError(err.message || 'Failed to delete comment');
       setDeleting(false);
+      setConfirmingDelete(false);
     }
+  };
+
+  const handleCancelDelete = () => {
+    if (deleting) return;
+    setConfirmingDelete(false);
   };
 
   // -----------------------------------------------------------
   // RENDER
   // -----------------------------------------------------------
+  const showActions = !editing && !confirmingDelete && (canEdit || canDelete);
+
   return (
     <div className="group flex gap-3.5 items-start">
-      {/* Avatar */}
+      {/* ─── Avatar ─── */}
       <div className="flex-shrink-0 pt-0.5">
         {comment.user.avatarUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={comment.user.avatarUrl}
             alt={displayName}
-            className="w-9 h-9 rounded-full object-cover"
+            className="
+              w-9 h-9 rounded-full object-cover
+              ring-1 ring-gray-200 dark:ring-white/[0.08]
+            "
           />
         ) : (
-          <div className="w-9 h-9 rounded-full bg-indigo-600 text-white flex items-center justify-center text-xs font-semibold">
+          <div
+            className="
+              w-9 h-9 rounded-full
+              bg-indigo-600 text-white
+              flex items-center justify-center
+              text-xs font-semibold
+              ring-1 ring-indigo-500/20
+            "
+            aria-hidden="true"
+          >
             {initials}
           </div>
         )}
       </div>
 
-      {/* Body */}
+      {/* ─── Body ─── */}
       <div className="flex-1 min-w-0">
-        {/* Header line: name + time + (edited) + actions */}
-        <div className="flex items-center gap-2 mb-1.5">
-          <span className="text-sm font-semibold text-gray-900 dark:text-white truncate">
+        {/* Header line: name · time · (edited) · actions */}
+        <div className="flex items-center gap-2 mb-1.5 min-h-[20px]">
+          <span className="text-[13px] font-semibold text-gray-900 dark:text-white truncate">
             {displayName}
           </span>
+
           <span
-            className="text-xs text-gray-400 dark:text-gray-500 flex-shrink-0"
+            className="text-[11px] text-gray-400 dark:text-gray-500 flex-shrink-0"
             title={new Date(comment.createdAt).toLocaleString()}
           >
             {formatRelative(comment.createdAt)}
           </span>
+
           {comment.isEdited && (
             <span
-              className="text-[10px] text-gray-400 dark:text-gray-500 italic flex-shrink-0"
+              className="text-[10px] italic flex-shrink-0 text-gray-400 dark:text-gray-500"
               title={`Edited ${new Date(comment.updatedAt).toLocaleString()}`}
             >
               (edited)
@@ -188,16 +226,35 @@ const CommentItem = ({
 
           <span className="flex-1" />
 
-          {/* Actions — hover on desktop, always visible on mobile */}
-          {!editing && (canEdit || canDelete) && (
-            <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity flex-shrink-0">
+          {/* Actions — fade in on hover (desktop) / focus-within (kbd).
+              On touch devices there's no hover, so we keep them
+              always visible below sm via `sm:opacity-0`. */}
+          {showActions && (
+            <div
+              className="
+                flex items-center gap-0.5 flex-shrink-0
+                opacity-100 sm:opacity-0
+                sm:group-hover:opacity-100
+                sm:group-focus-within:opacity-100
+                transition-opacity duration-150
+              "
+            >
               {canEdit && (
                 <button
                   type="button"
                   onClick={handleStartEdit}
                   disabled={deleting}
-                  className="p-1 rounded-md text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white dark:hover:bg-gray-800 disabled:opacity-40 transition-colors"
+                  aria-label="Edit comment"
                   title="Edit comment"
+                  className="
+                    p-2 rounded-lg
+                    text-gray-400
+                    hover:text-gray-900 dark:hover:text-white
+                    hover:bg-gray-100 dark:hover:bg-white/[0.06]
+                    active:scale-[0.96]
+                    disabled:opacity-40
+                    transition-all duration-150
+                  "
                 >
                   <svg
                     width="13"
@@ -215,13 +272,23 @@ const CommentItem = ({
                   </svg>
                 </button>
               )}
+
               {canDelete && (
                 <button
                   type="button"
-                  onClick={handleDelete}
+                  onClick={() => setConfirmingDelete(true)}
                   disabled={deleting}
-                  className="p-1 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 disabled:opacity-40 transition-colors"
+                  aria-label="Delete comment"
                   title="Delete comment"
+                  className="
+                    p-2 rounded-lg
+                    text-gray-400
+                    hover:text-red-600 dark:hover:text-red-400
+                    hover:bg-red-50 dark:hover:bg-red-500/10
+                    active:scale-[0.96]
+                    disabled:opacity-40
+                    transition-all duration-150
+                  "
                 >
                   <svg
                     width="13"
@@ -243,83 +310,217 @@ const CommentItem = ({
           )}
         </div>
 
-        {/* Content — view mode: soft card */}
-        {!editing && (
-          <div
-            className="
-              rounded-xl px-3.5 py-2.5
-              bg-gray-50 dark:bg-gray-800/40
-              border border-gray-100 dark:border-gray-800/60
-            "
-          >
-            <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words leading-relaxed">
-              {comment.content}
-            </p>
-            {error && (
-              <p className="text-xs text-red-600 dark:text-red-400 mt-2">
-                {error}
-              </p>
-            )}
-          </div>
-        )}
-
-        {/* Content — edit mode: textarea */}
-        {editing && (
-          <div
-            className="
-              rounded-xl p-3
-              bg-white dark:bg-gray-800
-              border border-indigo-300 dark:border-indigo-800
-            "
-          >
-            <textarea
-              ref={textareaRef}
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={handleEditKeyDown}
-              onInput={handleEditAutoSize}
-              disabled={saving}
-              rows={2}
-              maxLength={MAX_LENGTH}
-              className="w-full bg-transparent text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none resize-none disabled:opacity-60"
-            />
-            <div className="flex items-center justify-between gap-2 mt-2">
-              <p className="text-[11px] text-gray-500 dark:text-gray-400">
-                Ctrl+Enter to save · Esc to cancel
-              </p>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleCancelEdit}
-                  disabled={saving}
-                  className="px-2.5 py-1 rounded-md text-xs font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSaveEdit}
-                  disabled={saving}
-                  className="px-2.5 py-1 rounded-md text-xs font-medium bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white transition-colors"
-                >
-                  {saving ? 'Saving…' : 'Save'}
-                </button>
+        {/* ─── Content area (view / edit / delete-confirm) ─── */}
+        <AnimatePresence mode="wait" initial={false}>
+          {/* VIEW MODE */}
+          {!editing && !confirmingDelete && (
+            <motion.div
+              key="view"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15, ease: 'easeOut' }}
+            >
+              <div
+                className="
+                  rounded-xl px-3.5 py-2.5
+                  bg-gray-50 dark:bg-white/[0.03]
+                  border border-gray-100 dark:border-white/[0.06]
+                "
+              >
+                <p className="text-[13px] text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words leading-relaxed">
+                  {comment.content}
+                </p>
+                {error && (
+                  <p className="text-[11px] mt-2 text-red-600 dark:text-red-400">
+                    {error}
+                  </p>
+                )}
               </div>
-            </div>
-            {error && (
-              <p className="text-xs text-red-600 dark:text-red-400 mt-1">
-                {error}
-              </p>
-            )}
-          </div>
-        )}
+            </motion.div>
+          )}
+
+          {/* EDIT MODE */}
+          {editing && (
+            <motion.div
+              key="edit"
+              initial={{ opacity: 0, y: 2 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -2 }}
+              transition={{ duration: 0.18, ease: 'easeOut' }}
+            >
+              <div
+                className="
+                  rounded-xl p-3
+                  bg-white dark:bg-white/[0.04]
+                  border border-indigo-300 dark:border-indigo-500/40
+                  focus-within:ring-2 focus-within:ring-indigo-500/30
+                  transition-shadow
+                "
+              >
+                <textarea
+                  ref={textareaRef}
+                  value={draft}
+                  onChange={(e) => {
+                    setDraft(e.target.value);
+                    if (error) setError('');
+                  }}
+                  onKeyDown={handleEditKeyDown}
+                  onInput={handleEditAutoSize}
+                  disabled={saving}
+                  rows={2}
+                  maxLength={MAX_LENGTH}
+                  aria-label="Edit comment"
+                  className="
+                    w-full bg-transparent
+                    text-[13px] text-gray-900 dark:text-white
+                    placeholder-gray-400
+                    focus:outline-none resize-none
+                    disabled:opacity-60
+                  "
+                />
+                <div className="flex items-center justify-between gap-2 mt-2">
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                    <kbd className="px-1 py-0.5 rounded bg-gray-100 dark:bg-white/[0.06] text-[10px] font-mono">
+                      Ctrl
+                    </kbd>
+                    {' + '}
+                    <kbd className="px-1 py-0.5 rounded bg-gray-100 dark:bg-white/[0.06] text-[10px] font-mono">
+                      Enter
+                    </kbd>
+                    {' to save · Esc to cancel'}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleCancelEdit}
+                      disabled={saving}
+                      className="
+                        px-2.5 py-1 rounded-md
+                        text-[12px] font-medium
+                        text-gray-600 dark:text-gray-400
+                        hover:bg-gray-100 dark:hover:bg-white/[0.06]
+                        disabled:opacity-50
+                        transition-colors duration-150
+                      "
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveEdit}
+                      disabled={saving}
+                      className="
+                        px-3 py-1 rounded-md
+                        text-[12px] font-medium
+                        bg-indigo-600 hover:bg-indigo-700
+                        disabled:bg-indigo-400 dark:disabled:bg-indigo-800
+                        active:scale-[0.98]
+                        text-white
+                        transition-all duration-150
+                        inline-flex items-center gap-1.5
+                      "
+                    >
+                      {saving ? (
+                        <>
+                          <span className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                          Saving…
+                        </>
+                      ) : (
+                        'Save'
+                      )}
+                    </button>
+                  </div>
+                </div>
+                {error && (
+                  <p
+                    className="text-[11px] mt-1 text-red-600 dark:text-red-400"
+                    role="alert"
+                  >
+                    {error}
+                  </p>
+                )}
+              </div>
+            </motion.div>
+          )}
+
+          {/* DELETE CONFIRM — inline, matches the modal's
+              confirm philosophy but scoped to this comment. */}
+          {confirmingDelete && (
+            <motion.div
+              key="delete"
+              initial={{ opacity: 0, y: 2 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -2 }}
+              transition={{ duration: 0.18, ease: 'easeOut' }}
+            >
+              <div
+                className="
+                  rounded-xl px-3.5 py-3
+                  bg-red-500/[0.06] dark:bg-red-500/10
+                  border border-red-500/20
+                  flex flex-wrap items-center justify-between gap-3
+                "
+                role="alertdialog"
+                aria-label="Confirm comment deletion"
+              >
+                <p className="text-[12.5px] text-gray-700 dark:text-gray-300">
+                  Delete this comment?
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleCancelDelete}
+                    disabled={deleting}
+                    className="
+                      px-2.5 py-1 rounded-md
+                      text-[12px] font-medium
+                      text-gray-600 dark:text-gray-400
+                      hover:bg-gray-100 dark:hover:bg-white/[0.06]
+                      disabled:opacity-50
+                      transition-colors duration-150
+                    "
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleConfirmDelete}
+                    disabled={deleting}
+                    className="
+                      px-3 py-1 rounded-md
+                      text-[12px] font-medium
+                      bg-red-600 hover:bg-red-700
+                      disabled:bg-red-400 dark:disabled:bg-red-900
+                      active:scale-[0.98]
+                      text-white
+                      transition-all duration-150
+                      inline-flex items-center gap-1.5
+                    "
+                  >
+                    {deleting ? (
+                      <>
+                        <span className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                        Deleting…
+                      </>
+                    ) : (
+                      'Delete'
+                    )}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );
 };
 
 // =============================================================
-// formatRelative
+// formatRelative - human-friendly relative timestamp
+// (custom helper — keeping this instead of date-fns per project
+// convention. Kept inline because only this file uses it.)
 // =============================================================
 function formatRelative(isoString) {
   const then = new Date(isoString).getTime();

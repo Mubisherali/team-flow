@@ -2,23 +2,28 @@
 // ProjectsSection - Client wrapper for the projects grid
 // -------------------------------------------------------------
 //
-// PROPS:
-//   workspaceId     : string
-//   initialProjects : array (from server)
-//   canCreate       : boolean (owner or manager)
+// WHEN USED:
+//   Rendered by the workspace detail page. Owns modal state
+//   and the "create project" trigger.
 //
-// WHY A CLIENT WRAPPER:
-//   The parent page is a server component that fetches data.
-//   But we need:
-//     - Modal state (open/close)
-//     - router.refresh() after creation
-//     - Click handlers
-//   So we isolate the interactive bits here.
+// STRUCTURE:
+//   Header (title + count + New project button)
+//     - Grid (ProjectCard × N + dashed "create" card)
+//     OR
+//     - Empty state (EmptyProjects)
+//   CreateProjectModal (always rendered when canCreate)
 //
-// AFTER CREATION:
-//   We call router.refresh() so the server component re-runs
-//   and the new project appears. We DON'T mutate the array
-//   in place — the server is the source of truth.
+// POLISH:
+//   - Header typography matches Wave-3 scale
+//   - Dashed "create" card gets glass + indigo hover + motion
+//   - Empty state matches EmptyMembers/EmptyComments pattern
+//   - Primary buttons get active:scale + focus rings
+//   - A11y: section landmark, aria-labelledby, aria-hidden
+//
+// PRESERVED:
+//   - Same props (workspaceId, initialProjects, canCreate)
+//   - router.refresh() after creation (server is source of truth)
+//   - All three render branches (has-projects / empty / modal)
 // -------------------------------------------------------------
 
 'use client';
@@ -44,21 +49,35 @@ const ProjectsSection = ({ workspaceId, initialProjects, canCreate }) => {
 
   return (
     <>
-      {/* ─── Header ─── */}
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-          Projects
+      {/* ══════════ HEADER ══════════ */}
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <div className="flex items-baseline gap-2.5 min-w-0">
+          <h2
+            id="projects-heading"
+            className="text-[15px] font-semibold tracking-tight text-gray-900 dark:text-white truncate"
+          >
+            Projects
+          </h2>
           {hasProjects && (
-            <span className="ml-2 text-sm font-normal text-gray-500 dark:text-gray-400">
+            <span className="text-[12.5px] font-medium text-gray-500 dark:text-gray-400">
               {initialProjects.length}
             </span>
           )}
-        </h2>
+        </div>
 
         {canCreate && hasProjects && (
           <button
+            type="button"
             onClick={() => setIsModalOpen(true)}
-            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium transition-colors"
+            className="
+              inline-flex items-center gap-1.5 flex-shrink-0
+              px-3.5 py-2 rounded-lg
+              bg-indigo-600 hover:bg-indigo-700
+              active:scale-[0.98]
+              focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40
+              text-white text-[13px] font-medium
+              transition-all duration-150
+            "
           >
             <svg
               width="14"
@@ -67,6 +86,7 @@ const ProjectsSection = ({ workspaceId, initialProjects, canCreate }) => {
               fill="none"
               stroke="currentColor"
               strokeWidth="2.5"
+              aria-hidden="true"
             >
               <path d="M12 5v14M5 12h14" strokeLinecap="round" />
             </svg>
@@ -75,7 +95,7 @@ const ProjectsSection = ({ workspaceId, initialProjects, canCreate }) => {
         )}
       </div>
 
-      {/* ─── Content ─── */}
+      {/* ══════════ CONTENT ══════════ */}
       {hasProjects ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {initialProjects.map((project) => (
@@ -89,10 +109,29 @@ const ProjectsSection = ({ workspaceId, initialProjects, canCreate }) => {
           {/* Dashed "create" card at the end of the grid */}
           {canCreate && (
             <button
+              type="button"
               onClick={() => setIsModalOpen(true)}
-              className="group flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-700 p-6 min-h-[160px] hover:border-indigo-400 dark:hover:border-indigo-600 hover:bg-indigo-50/40 dark:hover:bg-indigo-950/30 transition-colors"
+              className="
+                group flex flex-col items-center justify-center gap-3
+                rounded-2xl p-6 min-h-[160px]
+                border-2 border-dashed
+                border-gray-300 dark:border-white/[0.08]
+                hover:border-indigo-500/40 dark:hover:border-indigo-500/40
+                hover:bg-indigo-500/[0.03] dark:hover:bg-indigo-500/[0.05]
+                active:scale-[0.99]
+                focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40
+                transition-all duration-150
+              "
             >
-              <div className="w-10 h-10 rounded-full bg-gray-100 dark:bg-gray-800 group-hover:bg-indigo-100 dark:group-hover:bg-indigo-900 flex items-center justify-center transition-colors">
+              <div
+                className="
+                  w-10 h-10 rounded-full
+                  bg-gray-100 dark:bg-white/[0.04]
+                  group-hover:bg-indigo-500/10 dark:group-hover:bg-indigo-500/15
+                  flex items-center justify-center
+                  transition-colors duration-150
+                "
+              >
                 <svg
                   width="18"
                   height="18"
@@ -100,12 +139,24 @@ const ProjectsSection = ({ workspaceId, initialProjects, canCreate }) => {
                   fill="none"
                   stroke="currentColor"
                   strokeWidth="2.5"
-                  className="text-gray-500 group-hover:text-indigo-600 dark:group-hover:text-indigo-400"
+                  className="
+                    text-gray-500 dark:text-gray-400
+                    group-hover:text-indigo-600 dark:group-hover:text-indigo-400
+                    transition-colors duration-150
+                  "
+                  aria-hidden="true"
                 >
                   <path d="M12 5v14M5 12h14" strokeLinecap="round" />
                 </svg>
               </div>
-              <span className="text-sm font-medium text-gray-600 dark:text-gray-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400">
+              <span
+                className="
+                  text-[13px] font-medium
+                  text-gray-600 dark:text-gray-400
+                  group-hover:text-indigo-600 dark:group-hover:text-indigo-400
+                  transition-colors duration-150
+                "
+              >
                 Create project
               </span>
             </button>
@@ -118,7 +169,7 @@ const ProjectsSection = ({ workspaceId, initialProjects, canCreate }) => {
         />
       )}
 
-      {/* ─── Modal ─── */}
+      {/* ══════════ MODAL ══════════ */}
       {canCreate && (
         <CreateProjectModal
           isOpen={isModalOpen}
@@ -135,15 +186,30 @@ const ProjectsSection = ({ workspaceId, initialProjects, canCreate }) => {
 // EmptyProjects - shown when there are no projects yet
 // =============================================================
 const EmptyProjects = ({ canCreate, onCreateClick }) => (
-  <div className="flex flex-col items-center justify-center py-16 px-4 rounded-2xl border border-dashed border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900">
-    <div className="w-14 h-14 rounded-full bg-indigo-100 dark:bg-indigo-950 flex items-center justify-center mb-4">
+  <div
+    className="
+      flex flex-col items-center justify-center
+      py-16 px-4 rounded-2xl
+      border border-dashed
+      border-gray-300 dark:border-white/[0.08]
+      bg-white/60 dark:bg-white/[0.02]
+    "
+  >
+    <div
+      className="
+        w-14 h-14 rounded-full mb-4
+        bg-indigo-500/10 dark:bg-indigo-500/15
+        flex items-center justify-center
+      "
+      aria-hidden="true"
+    >
       <svg
         width="22"
         height="22"
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"
-        strokeWidth="2"
+        strokeWidth="1.8"
         className="text-indigo-600 dark:text-indigo-400"
       >
         <path
@@ -153,26 +219,38 @@ const EmptyProjects = ({ canCreate, onCreateClick }) => (
         />
       </svg>
     </div>
-    <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-1">
+
+    <h3 className="text-[14px] font-semibold text-gray-900 dark:text-white mb-1">
       No projects yet
     </h3>
-    <p className="text-sm text-gray-500 dark:text-gray-400 mb-6 text-center max-w-sm">
+    <p className="text-[12.5px] text-gray-500 dark:text-gray-400 mb-6 text-center max-w-sm leading-relaxed">
       {canCreate
         ? 'A project is where tasks live. Create one to get started.'
         : 'No projects yet. Ask a workspace owner or manager to create one.'}
     </p>
+
     {canCreate && (
       <button
+        type="button"
         onClick={onCreateClick}
-        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium transition-colors"
+        className="
+          inline-flex items-center gap-1.5
+          px-4 py-2.5 rounded-xl
+          bg-indigo-600 hover:bg-indigo-700
+          active:scale-[0.98]
+          focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40
+          text-white text-[13px] font-medium
+          transition-all duration-150
+        "
       >
         <svg
-          width="16"
-          height="16"
+          width="14"
+          height="14"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
           strokeWidth="2.5"
+          aria-hidden="true"
         >
           <path d="M12 5v14M5 12h14" strokeLinecap="round" />
         </svg>
