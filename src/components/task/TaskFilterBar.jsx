@@ -2,21 +2,27 @@
 // TaskFilterBar - Client-side filter controls
 // -------------------------------------------------------------
 //
-// PROPS:
-//   filters          : { assignee, priority }
-//   onFiltersChange  : (newFilters) => void
-//   projectMembers   : array — [{ userId, name, email }]
-//   currentUserId    : string
-//   totalCount       : number — total tasks (unfiltered)
-//   visibleCount     : number — tasks matching the current filters
+// WHEN USED:
+//   Rendered by ProjectTasksSection above the Kanban board
+//   (only when tasks exist).
 //
-// FILTER SHAPE:
-//   assignee : 'all' | 'me' | <userId>
-//   priority : 'ALL' | 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT'
+// STRUCTURE:
+//   Row: "Filter:" label · assignee select · priority select ·
+//        Clear button (if active) · count (if active)
 //
-// STATELESS:
-//   Filters live in the parent (ProjectTasksSection). This bar
-//   just reflects them + emits changes. Single source of truth.
+// POLISH:
+//   - Selects get soft indigo focus ring (matches form inputs)
+//   - Clear button gets active:scale + focus ring
+//   - Count uses tabular-nums
+//   - Type scale aligned to Wave-3
+//   - A11y: aria-labels on selects, aria-hidden on icon
+//
+// PRESERVED:
+//   - Same props (filters, onFiltersChange, projectMembers,
+//     currentUserId, totalCount, visibleCount)
+//   - Same filter shape
+//   - Stateless (filters live in parent)
+//   - Same optgroup separation (members excluding "me")
 // -------------------------------------------------------------
 
 'use client';
@@ -43,10 +49,21 @@ const TaskFilterBar = ({
     onFiltersChange({ assignee: 'all', priority: 'ALL' });
   };
 
+  const selectClasses = `
+    text-[12px] px-2.5 py-1.5 rounded-lg
+    bg-white dark:bg-white/[0.03]
+    text-gray-700 dark:text-gray-300
+    border border-gray-200 dark:border-white/[0.08]
+    focus:outline-none
+    focus:ring-2 focus:ring-indigo-500/20
+    focus:border-indigo-500 dark:focus:border-indigo-500/60
+    transition-all duration-150
+  `;
+
   return (
-    <div className="flex flex-wrap items-center gap-3 py-3 px-1">
+    <div className="flex flex-wrap items-center gap-2.5 py-3">
       {/* Label */}
-      <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
+      <span className="text-[11.5px] font-medium text-gray-500 dark:text-gray-400">
         Filter:
       </span>
 
@@ -54,7 +71,8 @@ const TaskFilterBar = ({
       <select
         value={filters.assignee}
         onChange={(e) => update({ assignee: e.target.value })}
-        className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        aria-label="Filter by assignee"
+        className={selectClasses}
       >
         <option value="all">All assignees</option>
         <option value="me">Assigned to me</option>
@@ -75,7 +93,8 @@ const TaskFilterBar = ({
       <select
         value={filters.priority}
         onChange={(e) => update({ priority: e.target.value })}
-        className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        aria-label="Filter by priority"
+        className={selectClasses}
       >
         <option value="ALL">All priorities</option>
         {TASK_PRIORITIES.map((p) => (
@@ -90,15 +109,26 @@ const TaskFilterBar = ({
         <button
           type="button"
           onClick={clear}
-          className="flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+          className="
+            inline-flex items-center gap-1
+            px-2.5 py-1.5 rounded-lg
+            text-[11.5px] font-medium
+            text-gray-500 dark:text-gray-400
+            hover:text-gray-900 dark:hover:text-white
+            hover:bg-gray-100 dark:hover:bg-white/[0.06]
+            active:scale-[0.96]
+            focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40
+            transition-all duration-150
+          "
         >
           <svg
-            width="12"
-            height="12"
+            width="11"
+            height="11"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
             strokeWidth="2.5"
+            aria-hidden="true"
           >
             <path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" />
           </svg>
@@ -108,7 +138,7 @@ const TaskFilterBar = ({
 
       {/* Count — only when filtered */}
       {hasActiveFilters && (
-        <span className="ml-auto text-xs text-gray-500 dark:text-gray-400">
+        <span className="ml-auto text-[11.5px] text-gray-500 dark:text-gray-400 tabular-nums">
           {visibleCount} of {totalCount} task{totalCount === 1 ? '' : 's'}
         </span>
       )}

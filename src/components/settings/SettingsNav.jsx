@@ -2,16 +2,28 @@
 // SettingsNav - Sub-navigation for the settings section
 // -------------------------------------------------------------
 //
-// CLIENT COMPONENT because it uses usePathname() to highlight
-// the active link.
+// WHEN USED:
+//   Rendered by settings/layout.jsx on the left side of the
+//   two-column settings shell.
 //
-// ITEMS:
-//   - Profile       (live)
-//   - Appearance    (disabled — future)
-//   - Notifications (disabled — future)
+// STRUCTURE:
+//   <nav> with items:
+//     - Profile       (live)
+//     - Appearance    (disabled — future)
+//     - Notifications (disabled — future)
 //
-// Disabled items are visually muted and non-clickable, but still
-// visible so users can see what's coming.
+// POLISH:
+//   - Active state uses glass indigo (matches Wave-3)
+//   - Links get active:scale + focus-visible ring
+//   - Disabled items get aria-disabled + title
+//   - Icon strokeWidth normalized to 1.8
+//   - A11y: aria-current="page" on active link, aria-hidden on icons
+//
+// PRESERVED:
+//   - Same NAV_ITEMS structure
+//   - Same usePathname() active logic
+//   - Same disabled visual pattern (muted, non-clickable)
+//   - Same responsive behavior (horizontal on mobile, vertical on desktop)
 // -------------------------------------------------------------
 
 'use client';
@@ -30,7 +42,8 @@ const NAV_ITEMS = [
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"
-        strokeWidth="2"
+        strokeWidth="1.8"
+        aria-hidden="true"
       >
         <path
           d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"
@@ -51,7 +64,8 @@ const NAV_ITEMS = [
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"
-        strokeWidth="2"
+        strokeWidth="1.8"
+        aria-hidden="true"
       >
         <circle cx="12" cy="12" r="5" />
         <path
@@ -72,16 +86,14 @@ const NAV_ITEMS = [
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"
-        strokeWidth="2"
+        strokeWidth="1.8"
+        aria-hidden="true"
       >
         <path
           d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"
           strokeLinecap="round"
         />
-        <path
-          d="M13.73 21a2 2 0 01-3.46 0"
-          strokeLinecap="round"
-        />
+        <path d="M13.73 21a2 2 0 01-3.46 0" strokeLinecap="round" />
       </svg>
     ),
     enabled: false,
@@ -92,7 +104,15 @@ const SettingsNav = () => {
   const pathname = usePathname() || '';
 
   return (
-    <nav className="flex md:flex-col gap-1 overflow-x-auto md:overflow-x-visible md:sticky md:top-8 md:self-start">
+    <nav
+      aria-label="Settings sections"
+      className="
+        flex md:flex-col gap-1
+        overflow-x-auto md:overflow-x-visible
+        md:sticky md:top-8 md:self-start
+        -mx-1 px-1
+      "
+    >
       {NAV_ITEMS.map((item) => {
         const isActive = pathname === item.href;
 
@@ -100,10 +120,19 @@ const SettingsNav = () => {
           return (
             <span
               key={item.href}
-              className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-400 dark:text-gray-600 cursor-not-allowed whitespace-nowrap"
+              aria-disabled="true"
               title="Coming soon"
+              className="
+                flex items-center gap-2 flex-shrink-0
+                px-3 py-2 rounded-lg
+                text-[13px]
+                text-gray-400 dark:text-gray-600
+                cursor-not-allowed whitespace-nowrap
+              "
             >
-              <span className="flex-shrink-0 opacity-60">{item.icon}</span>
+              <span className="flex-shrink-0 opacity-60" aria-hidden="true">
+                {item.icon}
+              </span>
               {item.label}
             </span>
           );
@@ -113,13 +142,25 @@ const SettingsNav = () => {
           <Link
             key={item.href}
             href={item.href}
-            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
-              isActive
-                ? 'bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300'
-                : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
-            }`}
+            aria-current={isActive ? 'page' : undefined}
+            className={`
+              flex items-center gap-2 flex-shrink-0
+              px-3 py-2 rounded-lg
+              text-[13px] font-medium
+              whitespace-nowrap
+              active:scale-[0.98]
+              focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40
+              transition-all duration-150
+              ${
+                isActive
+                  ? 'bg-indigo-500/10 dark:bg-indigo-500/15 text-indigo-700 dark:text-indigo-300'
+                  : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/[0.04]'
+              }
+            `}
           >
-            <span className="flex-shrink-0">{item.icon}</span>
+            <span className="flex-shrink-0" aria-hidden="true">
+              {item.icon}
+            </span>
             {item.label}
           </Link>
         );

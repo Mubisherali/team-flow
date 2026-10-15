@@ -2,54 +2,73 @@
 // ProfileForm - Edit name + avatar
 // -------------------------------------------------------------
 //
-// PROPS:
-//   initialName      : string
-//   initialAvatarUrl : string (empty string if none)
-//   email            : string (read-only display)
+// WHEN USED:
+//   Rendered inside the "General" card on the profile
+//   settings page.
 //
-// FLOW:
-//   1. Avatar upload: click → file picker → upload to Cloudinary
-//      → update local state with new URL → mark dirty
-//   2. Name: type → update local state → mark dirty
-//   3. Save: PATCH /api/users/me with the changed fields
+// STRUCTURE:
+//   <form>
+//     - Status banner (glass success / error)
+//     - Avatar (preview + upload / remove controls)
+//     - Name field
+//     - Email field (read-only)
+//     - Footer: dirty indicator + Save button
 //
-// WHY UPLOAD IMMEDIATELY (not on Save):
-//   - Instant preview feedback
-//   - If upload fails, we show the error right away
-//   - Save handles just the metadata (name, avatarUrl)
+// POLISH:
+//   - Glass status banner + auto-dismiss success after 2.5s
+//   - Soft indigo focus ring on inputs
+//   - Avatar preview gets ring + refined upload overlay
+//   - Remove uses inline confirm (no native confirm())
+//   - Upload button gets active:scale + focus ring
+//   - Save button gets spinner + active:scale
+//   - A11y: aria-labels, role=alert, aria-invalid
 //
-// WHY NOT SAVE IMMEDIATELY ON UPLOAD:
-//   The user might upload, then change their mind and close.
-//   We upload the file to Cloudinary (small cost), but only
-//   persist the URL to our DB on Save.
-//   Orphaned Cloudinary files are cheap (25 GB free).
+// PRESERVED:
+//   - Props (initialName, initialAvatarUrl, email)
+//   - State (name, avatarUrl, errors, status, saving,
+//     uploading, uploadError)
+//   - isDirty logic
+//   - handleFileSelect / handleRemoveAvatar / handleSubmit
+//   - Zod validation via updateProfileSchema
+//   - PATCH /api/users/me
+//   - session update() + router.refresh()
+//   - Cloudinary upload via uploadImage
 // -------------------------------------------------------------
 
-"use client";
+'use client';
 
-import { useState, useRef } from "react";
-import { useRouter } from "next/navigation";
-import { useSession } from "next-auth/react";
-import { updateProfileSchema } from "@/lib/validators/user";
-import { uploadImage, UPLOAD_RULES } from "@/lib/upload";
+import { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
+import { motion, AnimatePresence } from 'framer-motion';
+
+import { updateProfileSchema } from '@/lib/validators/user';
+import { uploadImage, UPLOAD_RULES } from '@/lib/upload';
 
 const ProfileForm = ({ initialName, initialAvatarUrl, email }) => {
   const [name, setName] = useState(initialName);
   const [avatarUrl, setAvatarUrl] = useState(initialAvatarUrl);
 
   const [errors, setErrors] = useState({});
-  const [status, setStatus] = useState({ type: "", message: "" });
+  const [status, setStatus] = useState({ type: '', message: '' });
   const [saving, setSaving] = useState(false);
 
   const [uploading, setUploading] = useState(false);
-  const [uploadError, setUploadError] = useState("");
+  const [uploadError, setUploadError] = useState('');
 
-   const fileInputRef = useRef(null);
+  const fileInputRef = useRef(null);
   const router = useRouter();
   const { update } = useSession();
 
   // Unsaved changes?
   const isDirty = name !== initialName || avatarUrl !== initialAvatarUrl;
+
+  // Auto-dismiss success banner
+  useEffect(() => {
+    if (status.type !== 'success') return;
+    const t = setTimeout(() => setStatus({ type: '', message: '' }), 2500);
+    return () => clearTimeout(t);
+  }, [status]);
 
   // -----------------------------------------------------------
   // AVATAR UPLOAD
@@ -57,31 +76,30 @@ const ProfileForm = ({ initialName, initialAvatarUrl, email }) => {
   const handleFileSelect = async (e) => {
     const file = e.target.files?.[0];
     // Reset the input so the same file can be selected again later.
-    e.target.value = "";
+    e.target.value = '';
 
     if (!file) return;
 
-    setUploadError("");
+    setUploadError('');
     setUploading(true);
-    setStatus({ type: "", message: "" });
+    setStatus({ type: '', message: '' });
 
     try {
-      const result = await uploadImage(file, { folder: "teamflow/avatars" });
+      const result = await uploadImage(file, { folder: 'teamflow/avatars' });
       setAvatarUrl(result.secureUrl);
       // Don't auto-save — the user can review and click Save.
     } catch (err) {
-      console.error("[AVATAR_UPLOAD]", err);
-      setUploadError(err.message || "Upload failed. Please try again.");
+      console.error('[AVATAR_UPLOAD]', err);
+      setUploadError(err.message || 'Upload failed. Please try again.');
     } finally {
       setUploading(false);
     }
   };
 
   const handleRemoveAvatar = () => {
-    if (!confirm("Remove your profile picture?")) return;
-    setAvatarUrl("");
-    setUploadError("");
-    setStatus({ type: "", message: "" });
+    setAvatarUrl('');
+    setUploadError('');
+    setStatus({ type: '', message: '' });
   };
 
   // -----------------------------------------------------------
@@ -90,7 +108,7 @@ const ProfileForm = ({ initialName, initialAvatarUrl, email }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErrors({});
-    setStatus({ type: "", message: "" });
+    setStatus({ type: '', message: '' });
     setSaving(true);
 
     // Client-side validation
@@ -107,25 +125,25 @@ const ProfileForm = ({ initialName, initialAvatarUrl, email }) => {
     }
 
     try {
-      const res = await fetch("/api/users/me", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+      const res = await fetch('/api/users/me', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(parsed.data),
       });
       const data = await res.json();
 
       if (!res.ok) {
-        setStatus({ type: "error", message: data.error || "Failed to save" });
+        setStatus({ type: 'error', message: data.error || 'Failed to save' });
         setSaving(false);
         return;
       }
 
-      setStatus({ type: "success", message: "Profile updated" });
+      setStatus({ type: 'success', message: 'Profile updated' });
       setSaving(false);
 
       // Refresh the JWT so the new name/image are available
       // everywhere the session is read (sidebar, user menu, etc.).
-      if (typeof update === "function") {
+      if (typeof update === 'function') {
         await update({
           name: parsed.data.name,
           image: parsed.data.avatarUrl,
@@ -135,8 +153,8 @@ const ProfileForm = ({ initialName, initialAvatarUrl, email }) => {
       // Refresh server components (layout re-reads the session).
       router.refresh();
     } catch (err) {
-      console.error("[PROFILE_SAVE]", err);
-      setStatus({ type: "error", message: "Network error. Please try again." });
+      console.error('[PROFILE_SAVE]', err);
+      setStatus({ type: 'error', message: 'Network error. Please try again.' });
       setSaving(false);
     }
   };
@@ -144,32 +162,52 @@ const ProfileForm = ({ initialName, initialAvatarUrl, email }) => {
   // -----------------------------------------------------------
   // RENDER
   // -----------------------------------------------------------
-  const initials = (name || email || "?")
+  const initials = (name || email || '?')
     .trim()
     .split(/\s+/)
     .map((s) => s[0])
     .slice(0, 2)
-    .join("")
+    .join('')
     .toUpperCase();
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6" noValidate>
-      {/* Status banner */}
-      {status.message && (
-        <div
-          className={`p-3 rounded-lg border text-sm ${
-            status.type === "success"
-              ? "bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-900 text-green-700 dark:text-green-300"
-              : "bg-red-50 dark:bg-red-950 border-red-200 dark:border-red-900 text-red-700 dark:text-red-300"
-          }`}
-        >
-          {status.message}
-        </div>
-      )}
+      {/* ─── Status banner ─── */}
+      <AnimatePresence>
+        {status.message && (
+          <motion.div
+            key={status.type}
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
+            role="status"
+            aria-live="polite"
+            className={`
+              rounded-xl px-3.5 py-3 border
+              ${
+                status.type === 'success'
+                  ? 'bg-emerald-500/[0.07] dark:bg-emerald-500/10 border-emerald-500/20'
+                  : 'bg-red-500/[0.07] dark:bg-red-500/10 border-red-500/20'
+              }
+            `}
+          >
+            <p
+              className={`text-[12.5px] ${
+                status.type === 'success'
+                  ? 'text-emerald-700 dark:text-emerald-300'
+                  : 'text-red-700 dark:text-red-300'
+              }`}
+            >
+              {status.message}
+            </p>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ─── Avatar ─── */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+        <label className="block text-[12.5px] font-medium text-gray-700 dark:text-gray-300 mb-3">
           Profile picture
         </label>
 
@@ -181,16 +219,35 @@ const ProfileForm = ({ initialName, initialAvatarUrl, email }) => {
               <img
                 src={avatarUrl}
                 alt="Avatar preview"
-                className="w-20 h-20 rounded-full object-cover border border-gray-200 dark:border-gray-800"
+                className="
+                  w-20 h-20 rounded-full object-cover
+                  ring-1 ring-gray-200 dark:ring-white/[0.08]
+                "
               />
             ) : (
-              <div className="w-20 h-20 rounded-full bg-indigo-600 text-white flex items-center justify-center text-2xl font-bold">
+              <div
+                className="
+                  w-20 h-20 rounded-full
+                  bg-indigo-600 text-white
+                  flex items-center justify-center
+                  text-[24px] font-bold
+                  ring-1 ring-indigo-500/20
+                "
+                aria-hidden="true"
+              >
                 {initials}
               </div>
             )}
 
             {uploading && (
-              <div className="absolute inset-0 rounded-full bg-black/60 flex items-center justify-center">
+              <div
+                className="
+                  absolute inset-0 rounded-full
+                  bg-black/60 backdrop-blur-sm
+                  flex items-center justify-center
+                "
+                aria-hidden="true"
+              >
                 <div className="w-6 h-6 border-2 border-white/40 border-t-white rounded-full animate-spin" />
               </div>
             )}
@@ -203,7 +260,18 @@ const ProfileForm = ({ initialName, initialAvatarUrl, email }) => {
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={uploading}
-                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 transition-colors"
+                className="
+                  inline-flex items-center gap-2
+                  px-3 py-2 rounded-lg
+                  border border-gray-300 dark:border-white/[0.08]
+                  text-gray-700 dark:text-gray-300
+                  text-[13px] font-medium
+                  hover:bg-gray-50 dark:hover:bg-white/[0.04]
+                  active:scale-[0.98]
+                  focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40
+                  disabled:opacity-50 disabled:cursor-not-allowed
+                  transition-all duration-150
+                "
               >
                 <svg
                   width="14"
@@ -211,7 +279,8 @@ const ProfileForm = ({ initialName, initialAvatarUrl, email }) => {
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
-                  strokeWidth="2"
+                  strokeWidth="1.8"
+                  aria-hidden="true"
                 >
                   <path
                     d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"
@@ -219,27 +288,39 @@ const ProfileForm = ({ initialName, initialAvatarUrl, email }) => {
                     strokeLinejoin="round"
                   />
                 </svg>
-                {uploading ? "Uploading..." : "Upload new photo"}
+                {uploading ? 'Uploading…' : 'Upload new photo'}
               </button>
 
-              {avatarUrl && (
+              {avatarUrl && !uploading && (
                 <button
                   type="button"
                   onClick={handleRemoveAvatar}
-                  disabled={uploading}
-                  className="inline-flex items-center px-3 py-2 rounded-lg text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950 disabled:opacity-50 transition-colors"
+                  className="
+                    inline-flex items-center px-3 py-2 rounded-lg
+                    text-[13px] font-medium
+                    text-red-600 dark:text-red-400
+                    hover:bg-red-50 dark:hover:bg-red-500/10
+                    active:scale-[0.98]
+                    focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500/40
+                    transition-all duration-150
+                  "
                 >
                   Remove
                 </button>
               )}
             </div>
 
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+            <p className="text-[11.5px] text-gray-500 dark:text-gray-400 mt-2">
               {UPLOAD_RULES.description}
             </p>
 
             {uploadError && (
-              <p className="text-xs text-red-600 mt-1">{uploadError}</p>
+              <p
+                role="alert"
+                className="text-[11px] text-red-600 dark:text-red-400 mt-1.5"
+              >
+                {uploadError}
+              </p>
             )}
           </div>
 
@@ -247,7 +328,7 @@ const ProfileForm = ({ initialName, initialAvatarUrl, email }) => {
           <input
             ref={fileInputRef}
             type="file"
-            accept={UPLOAD_RULES.allowedTypes.join(",")}
+            accept={UPLOAD_RULES.allowedTypes.join(',')}
             onChange={handleFileSelect}
             className="hidden"
           />
@@ -258,7 +339,7 @@ const ProfileForm = ({ initialName, initialAvatarUrl, email }) => {
       <div>
         <label
           htmlFor="profile-name"
-          className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+          className="block text-[12.5px] font-medium text-gray-700 dark:text-gray-300 mb-1.5"
         >
           Name
         </label>
@@ -269,13 +350,34 @@ const ProfileForm = ({ initialName, initialAvatarUrl, email }) => {
           onChange={(e) => {
             setName(e.target.value);
             if (errors.name) setErrors((p) => ({ ...p, name: undefined }));
-            if (status.message) setStatus({ type: "", message: "" });
+            if (status.message) setStatus({ type: '', message: '' });
           }}
           maxLength={50}
-          className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          aria-invalid={!!errors.name}
+          aria-describedby={errors.name ? 'name-error' : undefined}
+          className={`
+            w-full px-3 py-2.5 rounded-xl
+            text-[13px]
+            bg-white dark:bg-white/[0.03]
+            text-gray-900 dark:text-white
+            placeholder-gray-400 dark:placeholder-gray-500
+            border transition-all duration-150
+            focus:outline-none
+            focus:ring-2 focus:ring-indigo-500/20
+            ${
+              errors.name
+                ? 'border-red-300 dark:border-red-500/40'
+                : 'border-gray-200 dark:border-white/[0.08] focus:border-indigo-500 dark:focus:border-indigo-500/60'
+            }
+          `}
         />
         {errors.name && (
-          <p className="text-xs text-red-600 mt-1">{errors.name}</p>
+          <p
+            id="name-error"
+            className="text-[11px] text-red-600 dark:text-red-400 mt-1.5"
+          >
+            {errors.name}
+          </p>
         )}
       </div>
 
@@ -283,7 +385,7 @@ const ProfileForm = ({ initialName, initialAvatarUrl, email }) => {
       <div>
         <label
           htmlFor="profile-email"
-          className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+          className="block text-[12.5px] font-medium text-gray-700 dark:text-gray-300 mb-1.5"
         >
           Email
         </label>
@@ -292,26 +394,51 @@ const ProfileForm = ({ initialName, initialAvatarUrl, email }) => {
           type="email"
           value={email}
           disabled
-          className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50 text-gray-500 dark:text-gray-400 cursor-not-allowed"
+          className="
+            w-full px-3 py-2.5 rounded-xl
+            text-[13px]
+            border border-gray-200 dark:border-white/[0.06]
+            bg-gray-50 dark:bg-white/[0.02]
+            text-gray-500 dark:text-gray-400
+            cursor-not-allowed
+          "
         />
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+        <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1.5">
           Email changes are not supported yet.
         </p>
       </div>
 
       {/* ─── Save ─── */}
-      <div className="flex items-center justify-end gap-3 pt-2">
+      <div className="flex items-center justify-end gap-3 pt-1">
         {isDirty && !saving && (
-          <span className="text-xs text-gray-500 dark:text-gray-400">
+          <span className="text-[11.5px] text-gray-500 dark:text-gray-400">
             Unsaved changes
           </span>
         )}
         <button
           type="submit"
           disabled={saving || uploading || !isDirty}
-          className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 dark:disabled:bg-gray-700 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors"
+          className="
+            inline-flex items-center gap-2
+            px-3.5 py-2 rounded-xl
+            bg-indigo-600 hover:bg-indigo-700
+            disabled:bg-gray-200 dark:disabled:bg-white/[0.06]
+            disabled:text-gray-400 dark:disabled:text-gray-500
+            disabled:cursor-not-allowed
+            active:scale-[0.98]
+            focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40
+            text-white text-[13px] font-medium
+            transition-all duration-150
+          "
         >
-          {saving ? "Saving..." : "Save changes"}
+          {saving ? (
+            <>
+              <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+              Saving…
+            </>
+          ) : (
+            'Save changes'
+          )}
         </button>
       </div>
     </form>

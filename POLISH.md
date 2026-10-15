@@ -59,16 +59,11 @@ For each file, do ALL of these in one pass:
 - [x] `src/components/workspace/AcceptInvitationButton.jsx`
 - [x] `src/app/invite/[token]/page.jsx`
 
-*(Note: Wave 3 in the original brief listed 6 files. Two more were
-added during polish — `PendingInvitationsList.jsx` and
-`AcceptInvitationButton.jsx` — because both are direct companions
-to `MembersListClient.jsx` and share its visual language.)*
-
 ---
 
-## 🌊 Wave 4 — Workspaces & Projects ← CURRENT
+## 🌊 Wave 4 — Workspaces & Projects ✅ DONE
 
-- [x] `src/app/(dashboard)/workspaces/[id]/page.jsx` — **← NEXT**
+- [x] `src/app/(dashboard)/workspaces/[id]/page.jsx`
 - [x] `src/app/(dashboard)/workspaces/[id]/settings/page.jsx`
 - [x] `src/app/(dashboard)/workspaces/[id]/members/page.jsx`
 - [x] `src/components/workspace/CreateWorkspaceModal.jsx`
@@ -80,6 +75,7 @@ to `MembersListClient.jsx` and share its visual language.)*
 - [x] `src/components/project/ProjectMembersModal.jsx`
 - [x] `src/components/project/ProjectSettingsForm.jsx`
 - [x] `src/components/project/DeleteProjectButton.jsx`
+- [x] `src/components/project/ManageMembersButton.jsx`
 - [x] `src/app/(dashboard)/workspaces/[id]/projects/[projectId]/page.jsx`
 - [x] `src/app/(dashboard)/workspaces/[id]/projects/[projectId]/settings/page.jsx`
 - [x] `src/components/task/TaskFilterBar.jsx`
@@ -88,20 +84,20 @@ to `MembersListClient.jsx` and share its visual language.)*
 
 ---
 
-## 🌊 Wave 5 — Settings & Profile
+## 🌊 Wave 5 — Settings & Profile ✅ DONE
 
-- [ ] `src/app/(dashboard)/settings/profile/page.jsx`
-- [ ] `src/app/(dashboard)/settings/layout.jsx`
-- [ ] `src/components/settings/ProfileForm.jsx`
-- [ ] `src/components/settings/ConnectedAccounts.jsx`
-- [ ] `src/components/settings/DeleteAccountButton.jsx`
-- [ ] `src/components/settings/SettingsNav.jsx`
+- [x] `src/app/(dashboard)/settings/layout.jsx`
+- [x] `src/app/(dashboard)/settings/profile/page.jsx`
+- [x] `src/components/settings/SettingsNav.jsx`
+- [x] `src/components/settings/ProfileForm.jsx`
+- [x] `src/components/settings/ConnectedAccounts.jsx`
+- [x] `src/components/settings/DeleteAccountButton.jsx`
 
 ---
 
-## 🌊 Wave 6 — Modals & Secondary
+## 🌊 Wave 6 — Modals & Secondary ← CURRENT
 
-- [ ] `src/components/layout/ModuleCard.jsx`
+- [ ] `src/components/layout/ModuleCard.jsx` — **← NEXT**
 - [ ] `src/components/layout/WorkspaceSwitcher.jsx`
 - [ ] `src/components/layout/MobileTopbar.jsx`
 - [ ] `src/components/layout/SidebarDrawer.jsx`
@@ -141,20 +137,22 @@ to `MembersListClient.jsx` and share its visual language.)*
 Use these as your reference.
 
 ### Spacing Scale
-- **Page padding:** `p-6` mobile, `p-8` desktop
-- **Section gap:** `space-y-6` or `gap-6`
+- **Page padding:** `p-6` mobile, `sm:p-8` desktop
+- **Section gap:** `space-y-8` between major sections, `space-y-5` inside forms
 - **Element gap:** `gap-2` small, `gap-3` medium, `gap-4` large
-- **Card padding:** `p-5` or `p-6`
+- **Card padding:** `p-5` or `p-5 sm:p-6`
 
 ### Typography Hierarchy
-- **Page title:** `text-[17px] font-semibold tracking-tight` (top-level page h1)
-- **Modal / section title:** `text-[15px] font-semibold tracking-tight`
-- **Card title:** `text-[13px] font-semibold`
+- **Page title (h1):** `text-[17px] font-semibold tracking-tight`
+- **Section title (h2):** `text-[15px] font-semibold tracking-tight`
+- **Sub-section title (h3):** `text-[13px] font-semibold`
 - **Body:** `text-[13px]`
 - **Small body:** `text-[12.5px]`
-- **Tiny / meta:** `text-[12px]`
-- **Micro / badges:** `text-[11px]` or `text-[10px]`
+- **Meta:** `text-[11.5px]`
+- **Micro (badges):** `text-[11px]` or `text-[10px]`
+- **Uppercase label:** `text-[11px] font-semibold uppercase tracking-wide`
 - **Muted text:** `text-gray-500 dark:text-gray-400`
+- **Numeric counters:** add `tabular-nums`
 
 ### Colors
 - **Primary:** `indigo-600` (hover `indigo-700`, disabled `indigo-400` / `dark:indigo-800`)
@@ -171,8 +169,10 @@ Use these as your reference.
 - **Divider (dark):** `white/[0.06]`
 - **Glass error:** `bg-red-500/[0.07] dark:bg-red-500/10 border-red-500/20`
 - **Glass warning:** `bg-amber-500/[0.07] dark:bg-amber-500/10 border-amber-500/20`
-- **Glass success:** `bg-emerald-500/10 dark:bg-emerald-500/15`
+- **Glass success:** `bg-emerald-500/[0.07] dark:bg-emerald-500/10 border-emerald-500/20`
 - **Glass info:** `bg-indigo-500/[0.07] dark:bg-indigo-500/10 border-indigo-500/20`
+- **Glass icon tile (indigo):** `bg-indigo-500/10 dark:bg-indigo-500/15`
+- **Glass icon tile (red):** `bg-red-500/10 dark:bg-red-500/15`
 
 ### Motion
 - **Backdrop fade:** `duration: 0.18, ease: 'easeOut'`
@@ -185,13 +185,13 @@ Use these as your reference.
 ### Micro-interactions
 - **Primary / secondary buttons:** `active:scale-[0.98]` + `transition-all duration-150`
 - **Icon buttons:** `p-2 rounded-lg active:scale-[0.96]` + `transition-all duration-150`
-- **Cards:** hover shadow + border color change
-- **Links:** hover color change
+- **Card hover:** border tint + soft shadow + optional `-translate-y-0.5`
 - **Focus (buttons/links):** `focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40`
 - **Focus (inputs):** `focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 dark:focus:border-indigo-500/60`
+- **Focus (danger inputs):** `focus:ring-red-500/20 focus:border-red-500 dark:focus:border-red-500/60`
 - **Disabled:** `disabled:opacity-50 disabled:cursor-not-allowed`
-- **Icon buttons hover surface:** `hover:bg-gray-100 dark:hover:bg-white/[0.06]`
 - **Danger icon button:** `hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10`
+- **Border radius:** `rounded-xl` for inputs/buttons, `rounded-2xl` for cards/modals
 
 ### Responsive Breakpoints
 - **Mobile:** `< 640px`
@@ -209,54 +209,86 @@ Use these as your reference.
 
 - **[2026-10-13]** Wave 3 (Collaboration) completed. Key decisions:
   - **Dark mode:** system-preference only (no manual toggle).
-  - **Comment rows:** no hover on rows (they aren't clickable). Only the
-    action buttons inside get hover.
+  - **Comment rows:** no hover on rows. Only the action buttons inside get hover.
   - **Comment animations:** only newly-posted comments animate in — initial
     load is instant (calm, no stagger on large threads).
   - **Delete confirmations:** inline two-button swap inside `CommentItem`,
-    NOT native `confirm()`. `MembersListClient` and `PendingInvitationsList`
-    use Framer Motion modals matching `DeleteConfirmOverlay`.
+    NOT native `confirm()`. Other modals match `DeleteConfirmOverlay`.
   - **`formatRelative`:** kept custom helper in `CommentItem.jsx` (not
     `date-fns`), per project convention.
   - **Row hover:** members & pending-invite rows DO get subtle hover
     (`hover:bg-gray-50/60 dark:hover:bg-white/[0.02]`) — they contain
     actionable controls.
-  - **Workspace avatar on `/invite/[token]`:** kept indigo→purple gradient
-    + inner ring (it's the only gradient in the app; acceptable as a
-    "welcome" moment).
+  - **Workspace avatar on `/invite/[token]`:** indigo→purple gradient kept
+    + inner ring (only gradient in the app; acceptable as a "welcome"
+    moment). Same treatment reused on workspace detail page.
 
-- **[2026-10-13]** File count rebalanced. Original Wave 3 had 6 files.
-  Added `PendingInvitationsList.jsx` and `AcceptInvitationButton.jsx`
-  because they share the MembersList visual language and were polished
-  together. Total: 54 → 56 files.
+- **[2026-10-14]** Wave 4 (Workspaces & Projects) completed. Key decisions:
+  - **Project cards:** soft indigo hover with shadow + `-translate-y-0.5`
+    lift. Avatar scales subtly (`group-hover:scale-105`).
+  - **Color picker** (create + settings): semantic `role="radiogroup"` +
+    `role="radio" aria-checked` per swatch.
+  - **Delete flows:** all mirror `DeleteWorkspaceButton` — type-to-confirm
+    email/name, glass red surfaces, spinner on submit.
+  - **Empty states:** unified pattern across projects/tasks/members — icon
+    in glass circle + h3 + helper text + optional CTA.
+  - **Project detail stats:** kept hardcoded "Progress 0%" — Phase 9
+    Analytics will replace it.
+
+- **[2026-10-15]** Wave 5 (Settings & Profile) completed. Key decisions:
+  - **`SettingsNav` disabled items:** use `aria-disabled="true"` +
+    `cursor-not-allowed` (not `<a>` with no href).
+  - **ProfileForm avatar remove:** native `confirm()` removed — it only
+    clears local state until Save, so accidental remove is reversible.
+  - **ProfileForm success flow:** still calls `session.update()` to refresh
+    the JWT (sidebar/user menu) then `router.refresh()`.
+  - **All destructive modals:** wrapped in `AnimatePresence`, use
+    `role="dialog"`, `aria-modal`, `aria-labelledby`, and body scroll lock.
 
 ---
 
 ## 🎯 Progress
 
-**Files polished:** 21 / 56
+**Files polished:** 46 / 56
 
-**Waves complete:** 1, 2, 3
+**Waves complete:** 1, 2, 3, 4, 5
 
-**Next up:** `src/app/(dashboard)/workspaces/[id]/page.jsx`
+**Next up:** `src/components/layout/ModuleCard.jsx`
 
-**Current session goal:** Start Wave 4 — Workspaces & Projects (17 files)
+**Current session goal:** Start Wave 6 — Modals & Secondary (5 files)
 
 ---
 
 ## 🧭 Known Future Refactors (not now — post-launch)
 
-- **Confirm modal duplication.** Three nearly identical confirm modals
-  exist: `DeleteConfirmOverlay` (in `TaskDetailModal`),
-  `RemoveConfirmModal` (in `MembersListClient`),
-  `ConfirmRevokeModal` (in `PendingInvitationsList`). Extract into a
-  shared `<ConfirmModal />` component after polish is complete.
+- **Confirm modal duplication.** Five nearly identical confirm modals exist
+  now: `DeleteConfirmOverlay` (in `TaskDetailModal`), `RemoveConfirmModal`
+  (in `MembersListClient`), `ConfirmRevokeModal` (in
+  `PendingInvitationsList`), `DeleteProjectButton`, `DeleteAccountButton`.
+  Extract into a shared `<ConfirmModal />` after polish is complete.
 
-- **`src/proxy.js` dead code.** The top ~70 lines are a commented-out
-  older version. Remove before launch.
+- **`canEdit` duplication.** Logic exists inline in
+  `ProjectTasksSection.jsx` (`canEditTask`) and
+  `tasks/[taskId]/page.jsx` (`canEdit`). Both should call
+  `canMutateTask` from `lib/permissions.js`.
+
+- **`shapeTask` object duplication.** Inline in
+  `projects/[projectId]/page.jsx`, `tasks/[taskId]/page.jsx`, and mirrored
+  in `TaskDetailModal` consumers. Extract a `shapeTask()` helper in `lib/`.
+
+- **Orphaned Cloudinary uploads.** `ProfileForm` uploads immediately on
+  file select but only saves URL on submit. Cancel = orphaned file.
+  Consider a cleanup cron or a "pending uploads" tracking mechanism.
+
+- **`src/proxy.js` dead code.** Top ~70 lines are commented-out older
+  version. Remove before launch.
 
 - **`layout.js` metadata.** `description` still says "Generated by create
   next app". Replace with real copy before launch.
 
 - **No `src/app/api/auth/[...nextauth]/route.js`** visible in tree.
   Verify NextAuth mount point before launch.
+
+- **`ProjectTasksSection` `useEffect` for stale detailTask.** Current logic
+  works (setDetailTaskId(null) if task no longer found) but could be
+  cleaner as derived state.

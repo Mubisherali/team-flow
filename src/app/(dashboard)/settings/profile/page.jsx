@@ -13,6 +13,18 @@
 //   The "Delete account" flow is blocked if the user owns any
 //   workspaces. We fetch the count here so the client can show
 //   the warning BEFORE the user tries to delete.
+//
+// POLISH:
+//   - Card surface matches TaskDetailModal (dark #0f1115)
+//   - Glass danger zone
+//   - Tighter type scale (Wave-3)
+//   - A11y: section landmarks, aria-hidden on decorative SVGs
+//
+// PRESERVED:
+//   - Same server logic (auth, user + accounts + workspace count)
+//   - passwordHash read but never sent to client (only boolean)
+//   - Distinct providers via Set
+//   - All three client component usages
 // -------------------------------------------------------------
 
 import { redirect } from 'next/navigation';
@@ -69,18 +81,27 @@ export default async function ProfileSettingsPage() {
   // ─── Render ───
   return (
     <div className="space-y-8">
-      {/* General */}
-      <section>
+      {/* ══════════ GENERAL ══════════ */}
+      <section aria-labelledby="general-heading">
         <div className="mb-4">
-          <h2 className="text-base font-semibold text-gray-900 dark:text-white">
+          <h2
+            id="general-heading"
+            className="text-[15px] font-semibold tracking-tight text-gray-900 dark:text-white"
+          >
             General
           </h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+          <p className="text-[12.5px] text-gray-500 dark:text-gray-400 mt-1">
             Update your name and profile picture.
           </p>
         </div>
 
-        <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-6">
+        <div
+          className="
+            rounded-2xl p-5 sm:p-6
+            border border-gray-200 dark:border-white/[0.08]
+            bg-white dark:bg-[#0f1115]
+          "
+        >
           <ProfileForm
             initialName={user.name || ''}
             initialAvatarUrl={user.avatarUrl || ''}
@@ -89,40 +110,58 @@ export default async function ProfileSettingsPage() {
         </div>
       </section>
 
-      {/* Connected accounts */}
-      <section>
+      {/* ══════════ CONNECTED ACCOUNTS ══════════ */}
+      <section aria-labelledby="accounts-heading">
         <div className="mb-4">
-          <h2 className="text-base font-semibold text-gray-900 dark:text-white">
+          <h2
+            id="accounts-heading"
+            className="text-[15px] font-semibold tracking-tight text-gray-900 dark:text-white"
+          >
             Connected accounts
           </h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+          <p className="text-[12.5px] text-gray-500 dark:text-gray-400 mt-1">
             Sign-in methods linked to your account.
           </p>
         </div>
 
-        <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-6">
+        <div
+          className="
+            rounded-2xl p-5 sm:p-6
+            border border-gray-200 dark:border-white/[0.08]
+            bg-white dark:bg-[#0f1115]
+          "
+        >
           <ConnectedAccounts providers={providers} email={user.email} />
         </div>
       </section>
 
-      {/* Danger zone */}
-      <section>
+      {/* ══════════ DANGER ZONE ══════════ */}
+      <section aria-labelledby="danger-heading">
         <div className="mb-4">
-          <h2 className="text-base font-semibold text-red-600 dark:text-red-400">
+          <h2
+            id="danger-heading"
+            className="text-[15px] font-semibold tracking-tight text-red-600 dark:text-red-400"
+          >
             Danger zone
           </h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+          <p className="text-[12.5px] text-gray-500 dark:text-gray-400 mt-1">
             Irreversible actions on your account.
           </p>
         </div>
 
-        <div className="rounded-xl border border-red-200 dark:border-red-900 bg-red-50/50 dark:bg-red-950/30 p-6">
+        <div
+          className="
+            rounded-2xl p-5 sm:p-6
+            border border-red-500/20
+            bg-red-500/[0.04] dark:bg-red-500/[0.06]
+          "
+        >
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
+            <div className="min-w-0">
+              <h3 className="text-[13px] font-semibold text-gray-900 dark:text-white">
                 Delete account
               </h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 max-w-md">
+              <p className="text-[12.5px] text-gray-600 dark:text-gray-400 mt-1 max-w-md leading-relaxed">
                 {ownedWorkspaceCount > 0
                   ? `You own ${ownedWorkspaceCount} workspace${
                       ownedWorkspaceCount === 1 ? '' : 's'

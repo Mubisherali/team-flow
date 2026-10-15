@@ -9,12 +9,25 @@
 //   - Verify the user can see this task
 //     (workspace member, project member, or privileged)
 //   - Fetch task + project + workspace + project members
-//   - Render <TaskPageClient>
+//   - Render <TaskPageView>
 //
 // WHERE THIS PAGE IS REACHED FROM:
 //   - Card's "⋯" menu → "Open full task" / "Ask a question"
 //   - Notifications (Phase 8) → direct link
 //   - Bookmark / shared link
+//
+// POLISH:
+//   - Header comment format aligned to other server pages
+//   - Cosmetic whitespace cleanup
+//   - No logic changes (page was already correct)
+//
+// PRESERVED:
+//   - All server logic (auth → workspace → hierarchy checks)
+//   - Promise.all fetches (task + project + workspace)
+//   - 404 on any mismatch (no info leak)
+//   - Project-member gate for non-privileged users
+//   - canEdit mirror of server canMutateTask
+//   - TaskPageView usage + props
 // -------------------------------------------------------------
 
 import { notFound, redirect } from 'next/navigation';
@@ -24,6 +37,7 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getMemberRole, canViewWorkspace } from '@/lib/permissions';
 import TaskPageView from '@/components/task/TaskPageView';
+
 export default async function TaskPage({ params }) {
   // ─── Auth ───
   const session = await getServerSession(authOptions);
@@ -145,15 +159,19 @@ export default async function TaskPage({ params }) {
     task.createdById === session.user.id;
 
   // ─── Render ───
- return (
-  <TaskPageView
-    task={shapedTask}
-    project={{ id: project.id, name: project.name }}
-    workspace={{ id: workspace.id, name: workspace.name, slug: workspace.slug }}
-    projectMembers={shapedMembers}
-    canEdit={canEdit}
-    currentUserId={session.user.id}
-    currentUserRole={role}
-  />
-);
+  return (
+    <TaskPageView
+      task={shapedTask}
+      project={{ id: project.id, name: project.name }}
+      workspace={{
+        id: workspace.id,
+        name: workspace.name,
+        slug: workspace.slug,
+      }}
+      projectMembers={shapedMembers}
+      canEdit={canEdit}
+      currentUserId={session.user.id}
+      currentUserRole={role}
+    />
+  );
 }
