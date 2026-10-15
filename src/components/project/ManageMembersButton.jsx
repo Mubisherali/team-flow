@@ -1,7 +1,27 @@
 // -------------------------------------------------------------
-// ManageMembersButton - Trigger button + modal for managing
-// project members. Client wrapper because the modal has state.
+// ManageMembersButton - Trigger + modal for managing members
 // -------------------------------------------------------------
+//
+// WHEN USED:
+//   Rendered in the Members section header on the project
+//   detail page (owner/manager only).
+//
+// STRUCTURE:
+//   Trigger button
+//     - Opens <ProjectMembersModal>
+//
+// POLISH:
+//   - Trigger button matches Wave-3 secondary button pattern
+//   - active:scale + focus ring
+//   - aria-haspopup="dialog" for SR
+//
+// PRESERVED:
+//   - Same props (workspaceId, projectId, projectMembers,
+//     allMembers, currentUserId)
+//   - Same state (isOpen)
+//   - Modal usage unchanged
+// -------------------------------------------------------------
+
 'use client';
 
 import { useState } from 'react';
@@ -19,8 +39,21 @@ const ManageMembersButton = ({
   return (
     <>
       <button
+        type="button"
         onClick={() => setIsOpen(true)}
-        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+        aria-haspopup="dialog"
+        aria-expanded={isOpen}
+        className="
+          inline-flex items-center gap-1.5 flex-shrink-0
+          px-3 py-2 rounded-lg
+          border border-gray-300 dark:border-white/[0.08]
+          text-gray-700 dark:text-gray-300
+          text-[12.5px] font-medium
+          hover:bg-gray-50 dark:hover:bg-white/[0.04]
+          active:scale-[0.98]
+          focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40
+          transition-all duration-150
+        "
       >
         <svg
           width="13"
@@ -28,7 +61,8 @@ const ManageMembersButton = ({
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
-          strokeWidth="2"
+          strokeWidth="1.8"
+          aria-hidden="true"
         >
           <path
             d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"

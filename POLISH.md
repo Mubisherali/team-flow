@@ -68,23 +68,23 @@ to `MembersListClient.jsx` and share its visual language.)*
 
 ## 🌊 Wave 4 — Workspaces & Projects ← CURRENT
 
-- [ ] `src/app/(dashboard)/workspaces/[id]/page.jsx` — **← NEXT**
-- [ ] `src/app/(dashboard)/workspaces/[id]/settings/page.jsx`
-- [ ] `src/app/(dashboard)/workspaces/[id]/members/page.jsx`
-- [ ] `src/components/workspace/CreateWorkspaceModal.jsx`
-- [ ] `src/components/workspace/WorkspaceSettingsForm.jsx`
-- [ ] `src/components/workspace/DeleteWorkspaceButton.jsx`
-- [ ] `src/components/project/ProjectCard.jsx`
-- [ ] `src/components/project/ProjectsSection.jsx`
-- [ ] `src/components/project/CreateProjectModal.jsx`
-- [ ] `src/components/project/ProjectMembersModal.jsx`
-- [ ] `src/components/project/ProjectSettingsForm.jsx`
-- [ ] `src/components/project/DeleteProjectButton.jsx`
-- [ ] `src/app/(dashboard)/workspaces/[id]/projects/[projectId]/page.jsx`
-- [ ] `src/app/(dashboard)/workspaces/[id]/projects/[projectId]/settings/page.jsx`
-- [ ] `src/components/task/TaskFilterBar.jsx`
-- [ ] `src/components/task/ProjectTasksSection.jsx`
-- [ ] `src/app/(dashboard)/workspaces/[id]/projects/[projectId]/tasks/[taskId]/page.jsx`
+- [x] `src/app/(dashboard)/workspaces/[id]/page.jsx` — **← NEXT**
+- [x] `src/app/(dashboard)/workspaces/[id]/settings/page.jsx`
+- [x] `src/app/(dashboard)/workspaces/[id]/members/page.jsx`
+- [x] `src/components/workspace/CreateWorkspaceModal.jsx`
+- [x] `src/components/workspace/WorkspaceSettingsForm.jsx`
+- [x] `src/components/workspace/DeleteWorkspaceButton.jsx`
+- [x] `src/components/project/ProjectCard.jsx`
+- [x] `src/components/project/ProjectsSection.jsx`
+- [x] `src/components/project/CreateProjectModal.jsx`
+- [x] `src/components/project/ProjectMembersModal.jsx`
+- [x] `src/components/project/ProjectSettingsForm.jsx`
+- [x] `src/components/project/DeleteProjectButton.jsx`
+- [x] `src/app/(dashboard)/workspaces/[id]/projects/[projectId]/page.jsx`
+- [x] `src/app/(dashboard)/workspaces/[id]/projects/[projectId]/settings/page.jsx`
+- [x] `src/components/task/TaskFilterBar.jsx`
+- [x] `src/components/task/ProjectTasksSection.jsx`
+- [x] `src/app/(dashboard)/workspaces/[id]/projects/[projectId]/tasks/[taskId]/page.jsx`
 
 ---
 

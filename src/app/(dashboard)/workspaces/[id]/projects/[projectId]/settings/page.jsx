@@ -11,6 +11,18 @@
 //   page.jsx (server) → auth + fetch project
 //   <ProjectSettingsForm>  (client) → rename, description, color
 //   <DeleteProjectButton>  (client) → danger zone
+//
+// POLISH:
+//   - Card surface matches TaskDetailModal (dark #0f1115)
+//   - Glass danger zone
+//   - Tighter type scale (Wave-3)
+//   - Back link + focus rings
+//   - A11y: section landmarks, aria-hidden on decorative SVGs
+//
+// PRESERVED:
+//   - Same server logic (auth → role gate → fetch)
+//   - notFound() for non-managers
+//   - Same component structure
 // -------------------------------------------------------------
 
 import { notFound, redirect } from 'next/navigation';
@@ -21,7 +33,6 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import {
   getMemberRole,
-  canManageProjectMembers,
   canEditProject,
 } from '@/lib/permissions';
 import ProjectSettingsForm from '@/components/project/ProjectSettingsForm';
@@ -61,11 +72,19 @@ export default async function ProjectSettingsPage({ params }) {
 
   // ─── Render ───
   return (
-    <div className="p-8 max-w-3xl mx-auto">
-      {/* Back link */}
+    <div className="p-6 sm:p-8 max-w-3xl mx-auto">
+      {/* ══════════ BACK LINK ══════════ */}
       <Link
         href={`/workspaces/${workspaceId}/projects/${projectId}`}
-        className="inline-flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white mb-6 transition-colors"
+        className="
+          inline-flex items-center gap-1.5 mb-6
+          text-[13px] font-medium
+          text-gray-600 dark:text-gray-400
+          hover:text-gray-900 dark:hover:text-white
+          focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40
+          rounded
+          transition-colors duration-150
+        "
       >
         <svg
           width="14"
@@ -73,7 +92,8 @@ export default async function ProjectSettingsPage({ params }) {
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
-          strokeWidth="2"
+          strokeWidth="1.8"
+          aria-hidden="true"
         >
           <path
             d="M19 12H5M12 19l-7-7 7-7"
@@ -84,22 +104,31 @@ export default async function ProjectSettingsPage({ params }) {
         Back to project
       </Link>
 
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+      {/* ══════════ HEADER ══════════ */}
+      <header className="mb-8">
+        <h1 className="text-[17px] font-semibold tracking-tight text-gray-900 dark:text-white">
           Project settings
         </h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+        <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-1">
           {project.name}
         </p>
-      </div>
+      </header>
 
-      {/* General */}
-      <section className="mb-8">
-        <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-4">
+      {/* ══════════ GENERAL ══════════ */}
+      <section aria-labelledby="general-heading" className="mb-8">
+        <h2
+          id="general-heading"
+          className="text-[13px] font-semibold tracking-tight text-gray-900 dark:text-white mb-4"
+        >
           General
         </h2>
-        <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-6">
+        <div
+          className="
+            rounded-2xl p-5 sm:p-6
+            border border-gray-200 dark:border-white/[0.08]
+            bg-white dark:bg-[#0f1115]
+          "
+        >
           <ProjectSettingsForm
             workspaceId={workspaceId}
             projectId={projectId}
@@ -110,18 +139,27 @@ export default async function ProjectSettingsPage({ params }) {
         </div>
       </section>
 
-      {/* Danger zone */}
-      <section>
-        <h2 className="text-base font-semibold text-red-600 dark:text-red-400 mb-4">
+      {/* ══════════ DANGER ZONE ══════════ */}
+      <section aria-labelledby="danger-heading">
+        <h2
+          id="danger-heading"
+          className="text-[13px] font-semibold tracking-tight text-red-600 dark:text-red-400 mb-4"
+        >
           Danger zone
         </h2>
-        <div className="rounded-xl border border-red-200 dark:border-red-900 bg-red-50/50 dark:bg-red-950/30 p-6">
+        <div
+          className="
+            rounded-2xl p-5 sm:p-6
+            border border-red-500/20
+            bg-red-500/[0.04] dark:bg-red-500/[0.06]
+          "
+        >
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
+            <div className="min-w-0">
+              <h3 className="text-[13px] font-semibold text-gray-900 dark:text-white">
                 Delete this project
               </h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 max-w-md">
+              <p className="text-[12.5px] text-gray-600 dark:text-gray-400 mt-1 max-w-md leading-relaxed">
                 Once deleted, the project and all its tasks are permanently
                 removed. Members will remain in the workspace.
               </p>
