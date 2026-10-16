@@ -3,21 +3,26 @@
 // -------------------------------------------------------------
 //
 // QUERY PARAMS:
-//   workspaceId : string (required)
-//   projectId   : string (optional)
+//   workspaceId : string (OPTIONAL)
+//   projectId   : string (optional — ignored if no workspaceId)
 //
 // RETURNS:
 //   {
 //     stats: {
-//       projectCount?,
-//       openTasks,
-//       doneTasks,
-//       memberCount,
+//       projectCount?,          // only if workspaceId provided
+//       openTasks?,             // only if workspaceId provided
+//       doneTasks?,             // only if workspaceId provided
+//       memberCount?,           // only if workspaceId provided
+//       pendingInvitationCount, // ALWAYS
 //     }
 //   }
 //
-// If projectId is provided, stats are project-scoped.
-// Otherwise they're workspace-scoped.
+// MODES:
+//   - No workspaceId  → only pendingInvitationCount
+//     (used outside workspaces so the Invitations module
+//      can still appear in the sidebar)
+//   - workspaceId     → workspace-scoped stats
+//   - + projectId     → project-scoped stats
 // -------------------------------------------------------------
 
 import { NextResponse } from 'next/server';
@@ -38,18 +43,35 @@ export async function GET(request) {
     const workspaceId = searchParams.get('workspaceId');
     const projectId = searchParams.get('projectId');
 
+    // ─── User-scoped invite count (always computed) ───
+    const userEmail = (session.user.email || '').toLowerCase().trim();
+
+    const pendingInvitationCount = userEmail
+      ? await prisma.invitation.count({
+          where: {
+            email: userEmail,
+            status: 'PENDING',
+          },
+        })
+      : 0;
+
+    // ─── No workspaceId → return just the invite count ───
     if (!workspaceId) {
-      return NextResponse.json(
-        { error: 'workspaceId is required' },
-        { status: 400 }
-      );
+      return NextResponse.json({
+        stats: { pendingInvitationCount },
+      });
     }
 
-    // ─── Access check ───
+    // ─── Workspace access check ───
     const role = await getMemberRole(session.user.id, workspaceId);
     if (!canViewWorkspace(role)) {
+      // Still return the invite count — the caller can show
+      // the Invitations module even if the workspace is gone.
       return NextResponse.json(
-        { error: 'Workspace not found' },
+        {
+          error: 'Workspace not found',
+          stats: { pendingInvitationCount },
+        },
         { status: 404 }
       );
     }
@@ -82,7 +104,12 @@ export async function GET(request) {
       ]);
 
       return NextResponse.json({
-        stats: { memberCount, openTasks, doneTasks },
+        stats: {
+          memberCount,
+          openTasks,
+          doneTasks,
+          pendingInvitationCount,
+        },
       });
     }
 
@@ -106,7 +133,13 @@ export async function GET(request) {
       ]);
 
     return NextResponse.json({
-      stats: { projectCount, memberCount, openTasks, doneTasks },
+      stats: {
+        projectCount,
+        memberCount,
+        openTasks,
+        doneTasks,
+        pendingInvitationCount,
+      },
     });
   } catch (error) {
     console.error('[SIDEBAR_STATS_ERROR]', error);

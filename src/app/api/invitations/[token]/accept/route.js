@@ -3,8 +3,9 @@
 // -------------------------------------------------------------
 //
 // PURPOSE:
-// Called by the /invite/[token] page when the user clicks
-// "Accept invitation". Adds the user to the workspace.
+// Called by the /invite/[token] page and the /invitations page
+// when the user clicks "Accept invitation". Adds the user to
+// the workspace and notifies the inviter.
 //
 // AUTH: MUST be logged in.
 //
@@ -17,7 +18,8 @@
 //   2. Verify user email matches
 //   3. Create WorkspaceMember row with the invited role
 //   4. Mark invitation as ACCEPTED
-//   5. Return workspace info for redirect
+//   5. Notify the inviter (fire-and-forget)
+//   6. Return workspace info for redirect
 //
 // ERROR CASES:
 //   401 - Not logged in
@@ -32,6 +34,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { isTokenExpired } from '@/lib/tokens';
+import { notifyInvitationEvent } from '@/lib/notifications';
 
 export async function POST(request, { params }) {
   try {
@@ -77,7 +80,9 @@ export async function POST(request, { params }) {
           error:
             invitation.status === 'ACCEPTED'
               ? 'This invitation has already been accepted'
-              : 'This invitation is no longer valid',
+              : invitation.status === 'DECLINED'
+                ? 'This invitation was declined'
+                : 'This invitation is no longer valid',
           status: invitation.status,
         },
         { status: 404 }
@@ -97,7 +102,6 @@ export async function POST(request, { params }) {
     }
 
     // ─── Step 5: Email match — THE security gate ───
-    // Compare case-insensitively.
     const sessionEmail = session.user.email.toLowerCase().trim();
     const inviteEmail = invitation.email.toLowerCase().trim();
 
@@ -144,7 +148,6 @@ export async function POST(request, { params }) {
     }
 
     // ─── Step 7: Transaction — create member + mark accepted ───
-    // Both must succeed or both roll back.
     const result = await prisma.$transaction(async (tx) => {
       const member = await tx.workspaceMember.create({
         data: {
@@ -162,7 +165,37 @@ export async function POST(request, { params }) {
       return member;
     });
 
-    // ─── Step 8: Success ───
+    // ─── Step 8: Notify the inviter (fire-and-forget) ───
+    // Wrapped in try/catch so a notification failure never
+    // breaks the accept action — the membership is already
+    // created by this point.
+    try {
+      const inviter = await prisma.user.findUnique({
+        where: { id: invitation.invitedById },
+        select: { id: true },
+      });
+
+      if (inviter && inviter.id !== session.user.id) {
+        const accepterName =
+          session.user.name || session.user.email || 'Someone';
+
+        await notifyInvitationEvent({
+          event: 'accepted',
+          recipientId: inviter.id,
+          workspace: invitation.workspace,
+          actorName: accepterName,
+          invitation: {
+            id: invitation.id,
+            email: invitation.email,
+            role: invitation.role,
+          },
+        });
+      }
+    } catch (notifyErr) {
+      console.error('[INVITATION_ACCEPT_NOTIFY]', notifyErr);
+    }
+
+    // ─── Step 9: Success ───
     return NextResponse.json(
       {
         message: 'Successfully joined workspace',
@@ -178,9 +211,6 @@ export async function POST(request, { params }) {
   } catch (error) {
     console.error('[INVITATION_ACCEPT_ERROR]', error);
 
-    // P2002 = unique constraint failed.
-    // Shouldn't happen because of Step 6, but race conditions
-    // are possible if the user clicks twice quickly.
     if (error.code === 'P2002') {
       return NextResponse.json(
         { error: 'You are already a member of this workspace' },

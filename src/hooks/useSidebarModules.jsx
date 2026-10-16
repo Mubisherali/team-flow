@@ -5,19 +5,22 @@
 // INPUT:
 //   { workspaceId, projectId, taskId, stats }
 //     - workspaceId/projectId/taskId : from URL params
-//     - stats : optional counts for subtext
-//         { projectCount, openTasks, doneTasks, memberCount }
+//     - stats : counts for subtext
+//         { projectCount, openTasks, doneTasks, memberCount,
+//           pendingInvitationCount }
 //
 // OUTPUT:
 //   Array of module definitions:
-//   [ { key, href, name, subtext, iconBg, icon, exact } ]
+//   [ { key, href, name, subtext, iconBg, icon, exact, badge? } ]
 //
 // BEHAVIOR:
-//   The modules CHANGE based on where you are:
-//     - In a workspace  → Overview, Projects, Tasks, Members
-//     - In a project    → Overview, Tasks, Members, Settings
-//     - In a task       → Task details, Comments
-//     - Not in workspace → (empty — switcher handles)
+//   - An "Invitations" module is prepended when the user has
+//     any pending invitations (badge shows the count).
+//   - Otherwise, modules CHANGE based on context:
+//       - In a workspace  → Overview, Projects, Members, Settings
+//       - In a project    → Overview, Tasks, Members, Settings
+//       - In a task       → Task details, Discussion
+//       - Not in workspace → just Invitations (if any)
 //
 // ICONS:
 //   Defined inline as small SVGs. Kept here (not extracted)
@@ -32,10 +35,7 @@ export function useSidebarModules({
   taskId,
   stats = {},
 }) {
-  // ─── No workspace → no modules ───
-  if (!workspaceId) return [];
-
-  // ─── Icon library (small SVGs for each module) ───
+  // ─── Icon library ───
   const ICONS = {
     overview: (
       <svg
@@ -160,6 +160,23 @@ export function useSidebarModules({
         />
       </svg>
     ),
+    invitations: (
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+      >
+        <rect x="2" y="4" width="20" height="16" rx="2" />
+        <path
+          d="M22 6l-10 7L2 6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    ),
   };
 
   // ─── Icon backgrounds (per module) ───
@@ -178,7 +195,30 @@ export function useSidebarModules({
       'bg-violet-100 dark:bg-violet-500/15 text-violet-600 dark:text-violet-400',
     comments:
       'bg-cyan-100 dark:bg-cyan-500/15 text-cyan-600 dark:text-cyan-400',
+    invitations:
+      'bg-amber-100 dark:bg-amber-500/15 text-amber-600 dark:text-amber-400',
   };
+
+  // ─── Invitations module (prepended when count > 0) ───
+  const inviteCount = stats.pendingInvitationCount || 0;
+  const invitationModule =
+    inviteCount > 0
+      ? [
+          {
+            key: 'invitations',
+            href: '/invitations',
+            exact: true,
+            name: 'Invitations',
+            subtext:
+              inviteCount === 1
+                ? '1 pending invite'
+                : `${inviteCount} pending invites`,
+            iconBg: BG.invitations,
+            icon: ICONS.invitations,
+            badge: String(inviteCount),
+          },
+        ]
+      : [];
 
   // ─── Build subtext from stats ───
   const projectsSubtext =
@@ -198,12 +238,20 @@ export function useSidebarModules({
 
   const membersSubtext =
     typeof stats.memberCount === 'number'
-      ? `${stats.memberCount} ${stats.memberCount === 1 ? 'teammate' : 'teammates'}`
+      ? `${stats.memberCount} ${
+          stats.memberCount === 1 ? 'teammate' : 'teammates'
+        }`
       : null;
+
+  // ─── No workspace → just show Invitations if any ───
+  if (!workspaceId) {
+    return invitationModule;
+  }
 
   // ─── Context 1: Inside a task ───
   if (workspaceId && projectId && taskId) {
     return [
+      ...invitationModule,
       {
         key: 'task',
         href: `/workspaces/${workspaceId}/projects/${projectId}/tasks/${taskId}`,
@@ -228,6 +276,7 @@ export function useSidebarModules({
   // ─── Context 2: Inside a project ───
   if (workspaceId && projectId) {
     return [
+      ...invitationModule,
       {
         key: 'overview',
         href: `/workspaces/${workspaceId}/projects/${projectId}`,
@@ -270,6 +319,7 @@ export function useSidebarModules({
   // ─── Context 3: Inside a workspace ───
   if (workspaceId) {
     return [
+      ...invitationModule,
       {
         key: 'overview',
         href: `/workspaces/${workspaceId}`,
@@ -309,6 +359,5 @@ export function useSidebarModules({
     ];
   }
 
-  // Fallback — no workspace
-  return [];
+  return invitationModule;
 }

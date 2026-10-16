@@ -16,6 +16,7 @@ enum WorkspaceRole {
 enum InvitationStatus {
   PENDING
   ACCEPTED
+  DECLINED
   EXPIRED
   REVOKED
 }
@@ -39,6 +40,8 @@ enum NotificationType {
   TASK_STATUS_CHANGED
   TASK_COMMENTED
   INVITATION_ACCEPTED
+  INVITATION_RECEIVED  
+  INVITATION_DECLINED   
   PROJECT_ADDED
 }
 

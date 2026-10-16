@@ -6,6 +6,9 @@
 //   - Task creation (notify on assign)
 //   - Task PATCH    (notify on reassign / status change)
 //   - Comment POST  (notify on comment)
+//   - Invitation POST   (notify existing user of incoming invite)
+//   - Invitation accept (notify inviter)
+//   - Invitation decline (notify inviter)
 //
 // DESIGN:
 //   createNotification() is FIRE-AND-FORGET. It never throws.
@@ -134,4 +137,95 @@ export async function notifyTaskEvent({
       createNotification({ userId, type, message, link })
     )
   );
+}
+
+// -------------------------------------------------------------
+// NOTIFY INVITATION EVENT
+// -------------------------------------------------------------
+// Higher-level helper for invitation lifecycle events.
+//
+// EVENTS:
+//   'received' → notify the invited user (only if they already
+//                have an account — otherwise no userId exists)
+//   'accepted' → notify the inviter
+//   'declined' → notify the inviter
+//
+// DEDUP:
+//   For 'received', we skip creating a duplicate if there's
+//   already an unread INVITATION_RECEIVED notification for the
+//   same link in the last hour. Prevents spam when the same
+//   invite is re-issued quickly.
+//
+// PARAMS:
+//   event        : 'received' | 'accepted' | 'declined'
+//   recipientId  : string (userId of the person to notify)
+//   workspace    : { id, name }
+//   actorName    : string (display name of the person doing the action)
+//   invitation   : { id, email, role } — used for link + message
+export async function notifyInvitationEvent({
+  event,
+  recipientId,
+  workspace,
+  actorName,
+  invitation,
+}) {
+  if (!event || !recipientId || !workspace) return;
+
+  // Build the deep link.
+  // 'received' → the invitee should land on the invitations page
+  //   so they can accept or decline from there.
+  // 'accepted' / 'declined' → the inviter should land on the
+  //   workspace members page to see the updated list.
+  const link =
+    event === 'received'
+      ? '/invitations'
+      : `/workspaces/${workspace.id}/members`;
+
+  let type;
+  let message;
+
+  if (event === 'received') {
+    type = 'INVITATION_RECEIVED';
+    const roleLabel =
+      invitation?.role === 'MANAGER' ? 'a manager' : 'a member';
+    message = `${actorName} invited you to join ${workspace.name} as ${roleLabel}`;
+  } else if (event === 'accepted') {
+    type = 'INVITATION_ACCEPTED';
+    message = `${actorName} accepted your invitation to ${workspace.name}`;
+  } else if (event === 'declined') {
+    type = 'INVITATION_DECLINED';
+    message = `${actorName} declined your invitation to ${workspace.name}`;
+  } else {
+    return;
+  }
+
+  // ─── Dedup for 'received' ───
+  // If an unread INVITATION_RECEIVED notification already exists
+  // for the same link in the last hour, skip.
+  if (event === 'received') {
+    try {
+      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+      const existing = await prisma.notification.findFirst({
+        where: {
+          userId: recipientId,
+          type: 'INVITATION_RECEIVED',
+          link,
+          isRead: false,
+          createdAt: { gte: oneHourAgo },
+        },
+      });
+      if (existing) return;
+    } catch (err) {
+      // If dedup check fails, proceed anyway (better to notify
+      // twice than to silently skip).
+      console.error('[notify] Dedup check failed', err);
+    }
+  }
+
+  await createNotification({
+    userId: recipientId,
+    type,
+    message,
+    link,
+  });
 }

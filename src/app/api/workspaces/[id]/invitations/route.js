@@ -4,7 +4,8 @@
 //
 // ENDPOINTS:
 //   POST /api/workspaces/:id/invitations
-//     - Create an invitation + send email
+//     - Create an invitation + send email + notify existing
+//       users via the bell
 //     - Auth: owner or manager
 //
 //   GET /api/workspaces/:id/invitations
@@ -15,6 +16,10 @@
 //   - Invitations expire after 7 days (see src/lib/tokens.js)
 //   - Duplicate prevention: no invite if email already a member
 //     or already has a pending invite for this workspace
+//   - If the invited email matches an EXISTING user account,
+//     we create an INVITATION_RECEIVED notification so their
+//     bell lights up immediately. Users without accounts get
+//     the invite when they sign up (see auth.js in Batch 6).
 // -------------------------------------------------------------
 
 import { NextResponse } from 'next/server';
@@ -27,6 +32,7 @@ import { generateToken, getTokenExpiry } from '@/lib/tokens';
 import { sendEmail } from '@/lib/email';
 import { invitationEmail } from '@/lib/email-templates';
 import { createInvitationSchema } from '@/lib/validators/invitation';
+import { notifyInvitationEvent } from '@/lib/notifications';
 
 // =============================================================
 // POST /api/workspaces/:id/invitations
@@ -78,7 +84,6 @@ export async function POST(request, { params }) {
     }
 
     // ─── Step 5: Prevent inviting existing members ───
-    // Look up a user by email, then check membership.
     const existingUser = await prisma.user.findUnique({
       where: { email },
       select: { id: true },
@@ -140,6 +145,34 @@ export async function POST(request, { params }) {
       process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
     const inviteLink = `${appUrl.replace(/\/$/, '')}/invite/${token}`;
 
+    // ─── Step 9.5: Notify existing user (fire-and-forget) ───
+    // If the invited email matches an EXISTING account, create
+    // an INVITATION_RECEIVED notification so the bell lights up
+    // immediately. Users who haven't signed up yet get the
+    // notification when they do (see auth.js).
+    //
+    // Wrapped in try/catch — a notification failure must never
+    // break the invite-creation flow.
+    if (existingUser) {
+      try {
+        const inviterName = session.user.name || session.user.email || 'Someone';
+
+        await notifyInvitationEvent({
+          event: 'received',
+          recipientId: existingUser.id,
+          workspace: { id: workspace.id, name: workspace.name },
+          actorName: inviterName,
+          invitation: {
+            id: invitation.id,
+            email: invitation.email,
+            role: invitation.role,
+          },
+        });
+      } catch (notifyErr) {
+        console.error('[INVITATION_NOTIFY_RECEIVED]', notifyErr);
+      }
+    }
+
     // ─── Step 10: Send email (best-effort) ───
     const inviterName = session.user.name || session.user.email;
 
@@ -159,8 +192,6 @@ export async function POST(request, { params }) {
     });
 
     // ─── Step 11: Respond ───
-    // Even if the email fails, the invitation row exists.
-    // We return the link so the UI can offer a "copy link" fallback.
     const response = {
       message: 'Invitation created',
       invitation: {
@@ -202,7 +233,6 @@ export async function GET(request, { params }) {
 
     const { id: workspaceId } = await params;
 
-    // Role check
     const role = await getMemberRole(session.user.id, workspaceId);
     if (!canInviteMembers(role)) {
       return NextResponse.json(
@@ -224,7 +254,6 @@ export async function GET(request, { params }) {
       orderBy: { createdAt: 'desc' },
     });
 
-    // Build the invite link for each — useful for UI "copy link".
     const appUrl =
       process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
     const baseUrl = appUrl.replace(/\/$/, '');
