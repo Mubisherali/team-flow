@@ -2,34 +2,45 @@
 // CreateTaskModal - Create a new task
 // -------------------------------------------------------------
 //
-// PROPS:
-//   isOpen         : boolean
-//   onClose        : () => void
-//   projectId      : string
-//   projectMembers : array — [{ userId, name, email, avatarUrl }]
-//   defaultStatus  : 'TODO' | 'IN_PROGRESS' | 'REVIEW' | 'DONE'
-//   onCreated      : (task) => void — parent refreshes
-//   currentUserId  : string
-//   currentUserRole: 'OWNER' | 'MANAGER' | 'MEMBER'
+// WHEN USED:
+//   Opened from ProjectTasksSection's "New task" button or a
+//   Kanban column's "+" button.
+//
+// STRUCTURE:
+//   Backdrop (animated)
+//     - Modal card (animated)
+//         - Header (title + close)
+//         - Form body:
+//             - Error banner
+//             - Title
+//             - Description
+//             - Status + Priority (custom <Select>)
+//             - Assignee (<AssigneeSelect>) + Due date
+//             - Labels (chip input)
+//         - Footer (Cancel / Create task)
 //
 // POLISH:
 //   - Framer Motion entry + exit
+//   - Custom glass dropdowns via <Select> + <AssigneeSelect>
+//     (matches TaskDetailModal exactly)
+//   - Glass error banner
 //   - Body scroll lock
-//   - Glass dark mode
-//   - Refined inputs (hover + smooth focus)
-//   - Enter-to-submit (footer inside the form)
+//   - Enter-to-submit (footer inside form)
 //   - Spinner in submit button
-//   - Dismissible error banner
 //
 // PRESERVED:
-//   - Label chip input (Enter/comma to add, Backspace to remove)
+//   - All state (form, labelInput, errors, serverError, loading)
+//   - Label chip input behavior (Enter/comma to add, Backspace)
 //   - Assignee filtering by permission
-//   - Same validators + API endpoint
+//   - Zod validation via createTaskSchema
+//   - POST /api/projects/[projectId]/tasks
+//   - Esc + backdrop close (respect loading)
+//   - Auto-focus title on open
 // -------------------------------------------------------------
 
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -39,23 +50,23 @@ import {
   TASK_PRIORITIES,
   fromDateTimeLocal,
 } from '@/lib/task-constants';
+import Select from '@/components/ui/Select';
+import AssigneeSelect from '@/components/ui/AssigneeSelect';
 
-// -------------------------------------------------------------
-// INPUT STYLES
-// -------------------------------------------------------------
+// ─── Shared input styles ───
 const inputBase = `
-  w-full px-3.5 py-2.5 rounded-xl text-sm
+  w-full px-3.5 py-2.5 rounded-xl text-[13px]
   border bg-white dark:bg-white/[0.03]
   text-gray-900 dark:text-white
   placeholder-gray-400 dark:placeholder-gray-500
   focus:outline-none focus:ring-2 focus:ring-indigo-500/60 focus:border-indigo-500
   transition-all duration-200
-  disabled:opacity-60
+  disabled:opacity-60 disabled:cursor-not-allowed
 `;
 const inputNormal =
   'border-gray-200 dark:border-white/[0.08] hover:border-gray-300 dark:hover:border-white/[0.12]';
 const inputErrorState =
-  'border-red-300 dark:border-red-900 focus:ring-red-500/60 focus:border-red-500';
+  'border-red-300 dark:border-red-500/40 focus:ring-red-500/60 focus:border-red-500';
 
 const CreateTaskModal = ({
   isOpen,
@@ -133,6 +144,34 @@ const CreateTaskModal = ({
     if (errors[name]) setErrors((prev) => ({ ...prev, [name]: undefined }));
     if (serverError) setServerError('');
   };
+
+  // ─── Assignable members (filtered by permission) ───
+  const assignableMembers = useMemo(() => {
+    if (!projectMembers) return [];
+    if (isPrivileged) return projectMembers;
+    return projectMembers.filter((m) => m.userId === currentUserId);
+  }, [isPrivileged, projectMembers, currentUserId]);
+
+  // ─── Dropdown options ───
+  const statusOptions = useMemo(
+    () =>
+      TASK_STATUSES.map((s) => ({
+        value: s.value,
+        label: s.label,
+        dot: s.dot,
+      })),
+    []
+  );
+
+  const priorityOptions = useMemo(
+    () =>
+      TASK_PRIORITIES.map((p) => ({
+        value: p.value,
+        label: p.label,
+        dot: p.dot,
+      })),
+    []
+  );
 
   // ─── Labels ───
   const handleAddLabel = () => {
@@ -303,20 +342,22 @@ const CreateTaskModal = ({
                   fill="none"
                   stroke="currentColor"
                   strokeWidth="1.8"
+                  aria-hidden="true"
                 >
-                  <path
-                    d="M18 6L6 18M6 6l12 12"
-                    strokeLinecap="round"
-                  />
+                  <path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" />
                 </svg>
               </button>
             </div>
 
-            {/* ══════════ FORM (includes footer for Enter-to-submit) ══════════ */}
-            <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0" noValidate>
+            {/* ══════════ FORM ══════════ */}
+            <form
+              onSubmit={handleSubmit}
+              className="flex flex-col flex-1 min-h-0"
+              noValidate
+            >
               {/* Body (scrollable) */}
               <div className="flex-1 overflow-y-auto px-5 sm:px-6 py-5 space-y-5">
-                {/* Error banner */}
+                {/* ─── Error banner ─── */}
                 <AnimatePresence>
                   {serverError && (
                     <motion.div
@@ -326,7 +367,14 @@ const CreateTaskModal = ({
                       transition={{ duration: 0.15 }}
                       className="overflow-hidden"
                     >
-                      <div className="flex items-start gap-2.5 p-3 rounded-xl bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20">
+                      <div
+                        role="alert"
+                        className="
+                          flex items-start gap-2.5 p-3 rounded-xl
+                          bg-red-500/[0.07] dark:bg-red-500/10
+                          border border-red-500/20
+                        "
+                      >
                         <svg
                           width="16"
                           height="16"
@@ -335,6 +383,7 @@ const CreateTaskModal = ({
                           stroke="currentColor"
                           strokeWidth="2"
                           className="text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5"
+                          aria-hidden="true"
                         >
                           <circle cx="12" cy="12" r="10" />
                           <path d="M12 8v4M12 16h.01" strokeLinecap="round" />
@@ -355,8 +404,12 @@ const CreateTaskModal = ({
                             fill="none"
                             stroke="currentColor"
                             strokeWidth="2.5"
+                            aria-hidden="true"
                           >
-                            <path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" />
+                            <path
+                              d="M18 6L6 18M6 6l12 12"
+                              strokeLinecap="round"
+                            />
                           </svg>
                         </button>
                       </div>
@@ -364,11 +417,11 @@ const CreateTaskModal = ({
                   )}
                 </AnimatePresence>
 
-                {/* Title */}
+                {/* ─── Title ─── */}
                 <div>
                   <label
                     htmlFor="task-title"
-                    className="block text-[13px] font-medium text-gray-700 dark:text-gray-300 mb-1.5"
+                    className="block text-[12.5px] font-medium text-gray-700 dark:text-gray-300 mb-1.5"
                   >
                     Title
                   </label>
@@ -382,22 +435,27 @@ const CreateTaskModal = ({
                     placeholder="What needs to be done?"
                     maxLength={150}
                     disabled={loading}
+                    aria-invalid={!!errors.title}
+                    aria-describedby={errors.title ? 'title-error' : undefined}
                     className={`${inputBase} ${
                       errors.title ? inputErrorState : inputNormal
                     }`}
                   />
                   {errors.title && (
-                    <p className="text-[12px] text-red-600 dark:text-red-400 mt-1.5">
+                    <p
+                      id="title-error"
+                      className="text-[11px] text-red-600 dark:text-red-400 mt-1.5"
+                    >
                       {errors.title}
                     </p>
                   )}
                 </div>
 
-                {/* Description */}
+                {/* ─── Description ─── */}
                 <div>
                   <label
                     htmlFor="task-desc"
-                    className="block text-[13px] font-medium text-gray-700 dark:text-gray-300 mb-1.5"
+                    className="block text-[12.5px] font-medium text-gray-700 dark:text-gray-300 mb-1.5"
                   >
                     Description{' '}
                     <span className="text-gray-400 dark:text-gray-500 font-normal">
@@ -417,90 +475,60 @@ const CreateTaskModal = ({
                   />
                 </div>
 
-                {/* Status + Priority */}
+                {/* ─── Status + Priority ─── */}
                 <div className="grid grid-cols-2 gap-3 sm:gap-4">
                   <div>
-                    <label
-                      htmlFor="task-status"
-                      className="block text-[13px] font-medium text-gray-700 dark:text-gray-300 mb-1.5"
-                    >
+                    <label className="block text-[12.5px] font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                       Status
                     </label>
-                    <select
-                      id="task-status"
-                      name="status"
+                    <Select
                       value={form.status}
-                      onChange={handleChange}
+                      options={statusOptions}
+                      onChange={(v) =>
+                        setForm((prev) => ({ ...prev, status: v }))
+                      }
                       disabled={loading}
-                      className={`${inputBase} ${inputNormal}`}
-                    >
-                      {TASK_STATUSES.map((s) => (
-                        <option key={s.value} value={s.value}>
-                          {s.label}
-                        </option>
-                      ))}
-                    </select>
+                      size="md"
+                    />
                   </div>
 
                   <div>
-                    <label
-                      htmlFor="task-priority"
-                      className="block text-[13px] font-medium text-gray-700 dark:text-gray-300 mb-1.5"
-                    >
+                    <label className="block text-[12.5px] font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                       Priority
                     </label>
-                    <select
-                      id="task-priority"
-                      name="priority"
+                    <Select
                       value={form.priority}
-                      onChange={handleChange}
+                      options={priorityOptions}
+                      onChange={(v) =>
+                        setForm((prev) => ({ ...prev, priority: v }))
+                      }
                       disabled={loading}
-                      className={`${inputBase} ${inputNormal}`}
-                    >
-                      {TASK_PRIORITIES.map((p) => (
-                        <option key={p.value} value={p.value}>
-                          {p.label}
-                        </option>
-                      ))}
-                    </select>
+                      size="md"
+                    />
                   </div>
                 </div>
 
-                {/* Assignee + Due date */}
+                {/* ─── Assignee + Due date ─── */}
                 <div className="grid grid-cols-2 gap-3 sm:gap-4">
                   <div>
-                    <label
-                      htmlFor="task-assignee"
-                      className="block text-[13px] font-medium text-gray-700 dark:text-gray-300 mb-1.5"
-                    >
+                    <label className="block text-[12.5px] font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                       Assignee
                     </label>
-                    <select
-                      id="task-assignee"
-                      name="assigneeId"
+                    <AssigneeSelect
                       value={form.assigneeId}
-                      onChange={handleChange}
+                      members={assignableMembers}
+                      currentUserId={currentUserId}
                       disabled={loading}
-                      className={`${inputBase} ${inputNormal}`}
-                    >
-                      <option value="">Unassigned</option>
-                      {(isPrivileged
-                        ? projectMembers
-                        : projectMembers.filter(
-                            (m) => m.userId === currentUserId
-                          )
-                      ).map((m) => (
-                        <option key={m.userId} value={m.userId}>
-                          {m.name || m.email}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={(v) =>
+                        setForm((prev) => ({ ...prev, assigneeId: v }))
+                      }
+                    />
                   </div>
 
                   <div>
                     <label
                       htmlFor="task-due"
-                      className="block text-[13px] font-medium text-gray-700 dark:text-gray-300 mb-1.5"
+                      className="block text-[12.5px] font-medium text-gray-700 dark:text-gray-300 mb-1.5"
                     >
                       Due date
                     </label>
@@ -516,9 +544,9 @@ const CreateTaskModal = ({
                   </div>
                 </div>
 
-                {/* Labels */}
+                {/* ─── Labels ─── */}
                 <div>
-                  <label className="block text-[13px] font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                  <label className="block text-[12.5px] font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                     Labels
                   </label>
 
@@ -531,7 +559,8 @@ const CreateTaskModal = ({
                             inline-flex items-center gap-1
                             text-[11px] font-medium
                             px-2 py-0.5 rounded-md
-                            bg-gray-100 dark:bg-white/[0.06]
+                            bg-white dark:bg-white/[0.06]
+                            border border-gray-200/70 dark:border-white/[0.05]
                             text-gray-700 dark:text-gray-300
                           "
                         >
@@ -549,6 +578,7 @@ const CreateTaskModal = ({
                               fill="none"
                               stroke="currentColor"
                               strokeWidth="3"
+                              aria-hidden="true"
                             >
                               <path
                                 d="M18 6L6 18M6 6l12 12"
@@ -575,7 +605,7 @@ const CreateTaskModal = ({
                     }`}
                   />
                   {errors.labels && (
-                    <p className="text-[12px] text-red-600 dark:text-red-400 mt-1.5">
+                    <p className="text-[11px] text-red-600 dark:text-red-400 mt-1.5">
                       {errors.labels}
                     </p>
                   )}
@@ -594,8 +624,9 @@ const CreateTaskModal = ({
                     text-gray-700 dark:text-gray-300
                     text-[13px] font-medium
                     hover:bg-gray-50 dark:hover:bg-white/[0.04]
-                    active:scale-[0.99]
-                    disabled:opacity-50
+                    active:scale-[0.98]
+                    focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40
+                    disabled:opacity-50 disabled:cursor-not-allowed
                     transition-all duration-150
                   "
                 >
@@ -607,11 +638,13 @@ const CreateTaskModal = ({
                   className="
                     flex-1 py-2.5 rounded-xl
                     bg-indigo-600 hover:bg-indigo-700
-                    disabled:bg-indigo-400 disabled:cursor-not-allowed
-                    active:scale-[0.99]
+                    disabled:bg-indigo-400 dark:disabled:bg-indigo-800
+                    disabled:cursor-not-allowed
+                    active:scale-[0.98]
+                    focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40
                     text-white text-[13px] font-medium
                     transition-all duration-150
-                    flex items-center justify-center gap-2
+                    inline-flex items-center justify-center gap-2
                   "
                 >
                   {loading ? (

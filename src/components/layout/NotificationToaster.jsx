@@ -2,15 +2,32 @@
 // NotificationToaster - Toast on new notification arrivals
 // -------------------------------------------------------------
 //
-// VISUAL:
-//   Slides down from the top-center of the viewport, like a
-//   mobile push notification. Larger, more prominent, with a
-//   colored accent bar and clickable body.
+// WHEN USED:
+//   Mounted once in the app. Fires a toast when a new
+//   notification arrives via polling.
 //
-// BEHAVIOR:
-//   - Fires when a new notification arrives via polling
-//   - Auto-dismisses after 5 seconds
-//   - Clickable → marks read + navigates
+// STRUCTURE:
+//   Top-center toast with:
+//     - Colored accent bar
+//     - Icon tile (glass tint by type)
+//     - "New notification" eyebrow + time
+//     - Message
+//     - "Click to open →" hint
+//     - Close button
+//
+// POLISH:
+//   - Icon tiles use glass tints (matches Wave-3 pattern)
+//   - Type scale aligned (13/11)
+//   - Close button gets focus ring + active:scale
+//   - aria-hidden on decorative SVGs
+//   - transition already correct (300ms ease-out)
+//
+// PRESERVED:
+//   - Context reads (latestArrival, acknowledgeArrival, markRead)
+//   - handleOpen logic (mark read if unread, then navigate)
+//   - toast.custom config (5000ms, top-center)
+//   - getAccentForType() switch (all types)
+//   - Keyboard support (Enter/Space on role=button)
 // -------------------------------------------------------------
 
 'use client';
@@ -58,7 +75,7 @@ const NotificationToaster = () => {
           `}
         >
           {/* Top accent bar */}
-          <div className={`h-1 w-full ${accent.bar}`} />
+          <div className={`h-1 w-full ${accent.bar}`} aria-hidden="true" />
 
           {/* Body — clickable div, not a button, so the inner
               close button is valid HTML. */}
@@ -76,7 +93,13 @@ const NotificationToaster = () => {
                 toast.dismiss(t.id);
               }
             }}
-            className="w-full flex items-start gap-3.5 p-4 text-left hover:bg-gray-50 dark:hover:bg-white/[0.03] transition-colors cursor-pointer"
+            className="
+              w-full flex items-start gap-3.5 p-4 text-left
+              hover:bg-gray-50 dark:hover:bg-white/[0.03]
+              focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40
+              transition-colors duration-150
+              cursor-pointer
+            "
           >
             {/* Icon */}
             <span
@@ -85,6 +108,7 @@ const NotificationToaster = () => {
                 flex-shrink-0 mt-0.5
                 ${accent.iconBg}
               `}
+              aria-hidden="true"
             >
               <svg
                 width="18"
@@ -110,33 +134,44 @@ const NotificationToaster = () => {
             {/* Content */}
             <span className="flex-1 min-w-0">
               <span className="flex items-center gap-2 mb-1">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                <span className="text-[10.5px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                   New notification
                 </span>
-                <span className="w-1 h-1 rounded-full bg-gray-300 dark:bg-gray-600" />
-                <span className="text-[11px] font-medium text-gray-400 dark:text-gray-500">
+                <span
+                  className="w-1 h-1 rounded-full bg-gray-300 dark:bg-gray-600"
+                  aria-hidden="true"
+                />
+                <span className="text-[10.5px] font-medium text-gray-400 dark:text-gray-500">
                   Just now
                 </span>
               </span>
 
-              <span className="block text-[14px] font-medium text-gray-900 dark:text-white leading-snug">
+              <span className="block text-[13px] font-medium text-gray-900 dark:text-white leading-snug">
                 {message}
               </span>
 
-              <span className="block text-[12px] text-indigo-600 dark:text-indigo-400 font-medium mt-2">
+              <span className="block text-[11.5px] text-indigo-600 dark:text-indigo-400 font-medium mt-2">
                 Click to open →
               </span>
             </span>
 
-            {/* Close button — now valid (inside a div, not a button) */}
+            {/* Close button — valid (inside a div, not a button) */}
             <button
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
                 toast.dismiss(t.id);
               }}
-              className="p-1 rounded-md text-gray-400 hover:text-gray-700 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 flex-shrink-0 transition-colors"
               aria-label="Dismiss"
+              className="
+                p-1.5 rounded-lg flex-shrink-0
+                text-gray-400
+                hover:text-gray-700 dark:hover:text-white
+                hover:bg-gray-100 dark:hover:bg-white/[0.06]
+                active:scale-[0.96]
+                focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40
+                transition-all duration-150
+              "
             >
               <svg
                 width="14"
@@ -144,7 +179,8 @@ const NotificationToaster = () => {
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
-                strokeWidth="2.5"
+                strokeWidth="2"
+                aria-hidden="true"
               >
                 <path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" />
               </svg>
@@ -173,37 +209,37 @@ function getAccentForType(type) {
       return {
         bar: 'bg-blue-500',
         iconBg:
-          'bg-blue-100 dark:bg-blue-500/15 text-blue-600 dark:text-blue-400',
+          'bg-blue-500/10 dark:bg-blue-500/15 text-blue-600 dark:text-blue-400',
       };
     case 'TASK_STATUS_CHANGED':
       return {
         bar: 'bg-emerald-500',
         iconBg:
-          'bg-emerald-100 dark:bg-emerald-500/15 text-emerald-600 dark:text-emerald-400',
+          'bg-emerald-500/10 dark:bg-emerald-500/15 text-emerald-600 dark:text-emerald-400',
       };
     case 'TASK_ASSIGNED':
       return {
         bar: 'bg-indigo-500',
         iconBg:
-          'bg-indigo-100 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400',
+          'bg-indigo-500/10 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400',
       };
     case 'INVITATION_ACCEPTED':
       return {
         bar: 'bg-amber-500',
         iconBg:
-          'bg-amber-100 dark:bg-amber-500/15 text-amber-600 dark:text-amber-400',
+          'bg-amber-500/10 dark:bg-amber-500/15 text-amber-600 dark:text-amber-400',
       };
     case 'PROJECT_ADDED':
       return {
         bar: 'bg-violet-500',
         iconBg:
-          'bg-violet-100 dark:bg-violet-500/15 text-violet-600 dark:text-violet-400',
+          'bg-violet-500/10 dark:bg-violet-500/15 text-violet-600 dark:text-violet-400',
       };
     default:
       return {
         bar: 'bg-indigo-500',
         iconBg:
-          'bg-indigo-100 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400',
+          'bg-indigo-500/10 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400',
       };
   }
 }

@@ -14,22 +14,30 @@
 //   This file only handles layout.
 //
 // POLISH:
-//   - Shared input styling (matches auth + create/edit)
-//   - Labels: rounded-md chips with borders
-//   - Gradient dividers
-//   - Animated error banner
-//   - Glass dark mode
+//   - Status + Priority use <Select> (custom glass dropdown)
+//   - Assignee uses <AssigneeSelect> (avatars + emails)
+//   - Labels are chip input with Enter/Backspace
+//   - Gradient divider + meta footer
+//   - Glass dark mode + light/dark parity
+//
+// PRESERVED:
+//   - All state and handlers from useTaskEditor
+//   - Auto-save on blur
+//   - Comments section at the bottom
+//   - Error banner behavior
 // -------------------------------------------------------------
 
 'use client';
 
-import { useState,useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 
 import { useTaskEditor } from '@/hooks/useTaskEditor';
 import { TASK_PRIORITIES } from '@/lib/task-constants';
+import Select from '@/components/ui/Select';
+import AssigneeSelect from '@/components/ui/AssigneeSelect';
 import CommentList from './CommentList';
 
-// ─── Shared input styles ───
+// ─── Shared input styles (kept for text/textarea consistency) ───
 const inputBase = `
   w-full px-3.5 py-2.5 rounded-xl text-sm
   border bg-white dark:bg-white/[0.03]
@@ -126,11 +134,48 @@ const TaskFields = ({
     }
   };
 
+  // ─── Status options for <Select> ───
+  // Show current status at the top (as current), then the
+  // remaining allowed statuses from availableStatuses.
+  const statusOptions = useMemo(() => {
+    const current = {
+      value: status,
+      label: currentStatusMeta?.label || status,
+      dot: currentStatusMeta?.dot,
+    };
+    const rest = availableStatuses
+      .filter((s) => s.value !== status)
+      .map((s) => ({
+        value: s.value,
+        label: s.label,
+        dot: s.dot,
+      }));
+    return [current, ...rest];
+  }, [status, currentStatusMeta, availableStatuses]);
+
+  // ─── Priority options for <Select> ───
+  const priorityOptions = useMemo(
+    () =>
+      TASK_PRIORITIES.map((p) => ({
+        value: p.value,
+        label: p.label,
+        dot: p.dot,
+      })),
+    []
+  );
+
   return (
     <div className="space-y-6">
       {/* ══════════ ERROR BANNER ══════════ */}
       {saveError && (
-        <div className="flex items-start gap-2.5 p-3 rounded-xl bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20">
+        <div
+          className="
+            flex items-start gap-2.5 p-3 rounded-xl
+            bg-red-500/[0.07] dark:bg-red-500/10
+            border border-red-500/20
+          "
+          role="alert"
+        >
           <svg
             width="16"
             height="16"
@@ -139,6 +184,7 @@ const TaskFields = ({
             stroke="currentColor"
             strokeWidth="2"
             className="text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5"
+            aria-hidden="true"
           >
             <circle cx="12" cy="12" r="10" />
             <path d="M12 8v4M12 16h.01" strokeLinecap="round" />
@@ -159,6 +205,7 @@ const TaskFields = ({
               fill="none"
               stroke="currentColor"
               strokeWidth="2.5"
+              aria-hidden="true"
             >
               <path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" />
             </svg>
@@ -214,28 +261,15 @@ const TaskFields = ({
           <label className="block text-[10.5px] font-bold uppercase tracking-[0.12em] text-gray-400 dark:text-gray-600 mb-1.5">
             Status
           </label>
-          <select
+
+          <Select
             value={status}
-            onChange={(e) => handleSelectChange('status', e.target.value)}
+            options={statusOptions}
+            onChange={(v) => handleSelectChange('status', v)}
             disabled={!canEdit || !canMoveStatus}
-            title={
-              !canMoveStatus
-                ? 'You cannot change the status of this task'
-                : undefined
-            }
-            className={`${inputBase} ${inputNormal}`}
-          >
-            <option value={status}>
-              {currentStatusMeta?.label || status}
-            </option>
-            {availableStatuses
-              .filter((s) => s.value !== status)
-              .map((s) => (
-                <option key={s.value} value={s.value}>
-                  {s.label}
-                </option>
-              ))}
-          </select>
+            size="md"
+          />
+
           {!isPrivileged &&
             status !== 'DONE' &&
             canMoveToStatus('REVIEW') &&
@@ -255,18 +289,14 @@ const TaskFields = ({
           <label className="block text-[10.5px] font-bold uppercase tracking-[0.12em] text-gray-400 dark:text-gray-600 mb-1.5">
             Priority
           </label>
-          <select
+
+          <Select
             value={priority}
-            onChange={(e) => handleSelectChange('priority', e.target.value)}
+            options={priorityOptions}
+            onChange={(v) => handleSelectChange('priority', v)}
             disabled={!canEdit}
-            className={`${inputBase} ${inputNormal}`}
-          >
-            {TASK_PRIORITIES.map((p) => (
-              <option key={p.value} value={p.value}>
-                {p.label}
-              </option>
-            ))}
-          </select>
+            size="md"
+          />
         </div>
       </div>
 
@@ -276,12 +306,13 @@ const TaskFields = ({
           <label className="block text-[10.5px] font-bold uppercase tracking-[0.12em] text-gray-400 dark:text-gray-600 mb-1.5">
             Assignee
           </label>
+
           <AssigneeSelect
             value={assigneeId}
             members={assignableMembers}
             currentUserId={currentUserId}
             disabled={!canEdit}
-            onChange={(value) => handleSelectChange('assigneeId', value)}
+            onChange={(v) => handleSelectChange('assigneeId', v)}
           />
         </div>
 
@@ -334,6 +365,7 @@ const TaskFields = ({
                       fill="none"
                       stroke="currentColor"
                       strokeWidth="3"
+                      aria-hidden="true"
                     >
                       <path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" />
                     </svg>
@@ -401,230 +433,6 @@ const TaskFields = ({
           currentUserRole={currentUserRole}
         />
       </div>
-    </div>
-  );
-};
-
-// =============================================================
-// AssigneeSelect
-// =============================================================
-const AssigneeSelect = ({
-  value,
-  members,
-  currentUserId,
-  disabled,
-  onChange,
-}) => {
-  const [open, setOpen] = useState(false);
-  const wrapRef = useRef(null);
-
-  // Close on outside click
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target)) {
-        setOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [open]);
-
-  // Close on Escape
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e) => {
-      if (e.key === 'Escape') setOpen(false);
-    };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [open]);
-
-  const selected = members.find((m) => m.userId === value);
-
-  const handleSelect = (userId) => {
-    onChange(userId);
-    setOpen(false);
-  };
-
-  return (
-    <div className="relative" ref={wrapRef}>
-      {/* Trigger */}
-      <button
-        type="button"
-        onClick={() => !disabled && setOpen((v) => !v)}
-        disabled={disabled}
-        className={`${inputBase} ${inputNormal} flex items-center gap-2 text-left`}
-      >
-        {selected ? (
-          <>
-            <UserAvatar
-              name={selected.name}
-              email={selected.email}
-              image={selected.avatarUrl}
-            />
-            <span className="flex-1 min-w-0 truncate text-gray-900 dark:text-white">
-              {selected.name || selected.email}
-            </span>
-            {selected.userId === currentUserId && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-gray-100 dark:bg-white/[0.06] text-gray-600 dark:text-gray-400 flex-shrink-0">
-                YOU
-              </span>
-            )}
-          </>
-        ) : (
-          <>
-            <span className="w-5 h-5 rounded-full border border-dashed border-gray-300 dark:border-gray-600 flex-shrink-0" />
-            <span className="flex-1 min-w-0 truncate text-gray-500 dark:text-gray-400">
-              Unassigned
-            </span>
-          </>
-        )}
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          className="text-gray-400 flex-shrink-0"
-        >
-          <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </button>
-
-      {/* Menu */}
-      {open && (
-        <div
-          className="
-            absolute top-full left-0 right-0 mt-1 z-50
-            max-h-64 overflow-y-auto
-            rounded-xl
-            bg-white dark:bg-[#111318]
-            border border-gray-200 dark:border-white/[0.08]
-            shadow-xl shadow-black/10 dark:shadow-black/40
-            py-1
-          "
-        >
-          {/* Unassigned option */}
-          <button
-            type="button"
-            onClick={() => handleSelect('')}
-            className={`
-              w-full flex items-center gap-2.5 px-3 py-2 text-left text-[13px]
-              transition-colors
-              ${
-                !value
-                  ? 'bg-indigo-50 dark:bg-indigo-500/10'
-                  : 'hover:bg-gray-50 dark:hover:bg-white/[0.04]'
-              }
-            `}
-          >
-            <span className="w-5 h-5 rounded-full border border-dashed border-gray-300 dark:border-gray-600 flex-shrink-0" />
-            <span className="text-gray-500 dark:text-gray-400">
-              Unassigned
-            </span>
-          </button>
-
-          {members.length > 0 && (
-            <div className="border-t border-gray-100 dark:border-white/[0.06] my-1" />
-          )}
-
-          {/* Members */}
-          {members.map((m) => {
-            const isSelected = m.userId === value;
-            const isMe = m.userId === currentUserId;
-            return (
-              <button
-                key={m.userId}
-                type="button"
-                onClick={() => handleSelect(m.userId)}
-                className={`
-                  w-full flex items-center gap-2.5 px-3 py-2 text-left
-                  transition-colors
-                  ${
-                    isSelected
-                      ? 'bg-indigo-50 dark:bg-indigo-500/10'
-                      : 'hover:bg-gray-50 dark:hover:bg-white/[0.04]'
-                  }
-                `}
-              >
-                <UserAvatar
-                  name={m.name}
-                  email={m.email}
-                  image={m.avatarUrl}
-                />
-                <div className="flex-1 min-w-0">
-                  <p className="text-[13px] font-medium text-gray-900 dark:text-white truncate">
-                    {m.name || m.email}
-                  </p>
-                  {m.name && m.email && (
-                    <p className="text-[11px] text-gray-500 dark:text-gray-500 truncate">
-                      {m.email}
-                    </p>
-                  )}
-                </div>
-                {isMe && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-gray-100 dark:bg-white/[0.06] text-gray-600 dark:text-gray-400 flex-shrink-0">
-                    YOU
-                  </span>
-                )}
-                {isSelected && !isMe && (
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="3"
-                    className="text-indigo-600 dark:text-indigo-400 flex-shrink-0"
-                  >
-                    <path
-                      d="M20 6L9 17l-5-5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                )}
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-};
-
-// =============================================================
-// UserAvatar
-// =============================================================
-const UserAvatar = ({ name, email, image }) => {
-  const initials = (name || email || '?')
-    .trim()
-    .split(/\s+/)
-    .map((s) => s[0])
-    .slice(0, 2)
-    .join('')
-    .toUpperCase();
-
-  if (image) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={image}
-        alt={name || 'User'}
-        title={name || email}
-        className="w-5 h-5 rounded-full object-cover flex-shrink-0"
-      />
-    );
-  }
-
-  return (
-    <div
-      className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center font-semibold flex-shrink-0 text-[9px]"
-      title={name || email}
-    >
-      {initials}
     </div>
   );
 };

@@ -2,14 +2,24 @@
 // NotificationItem - Single row in the notification dropdown
 // -------------------------------------------------------------
 //
-// PROPS:
-//   notification : { id, type, message, link, isRead, createdAt }
-//   onClick      : (notification) => void  — navigate + mark read
+// WHEN USED:
+//   Rendered by <NotificationDropdown> for each notification.
 //
-// VISUAL:
-//   Icon (colored by type) · message · relative time
-//   Unread → indigo dot on the left + semibold message
-//   Read   → muted text
+// STRUCTURE:
+//   Unread dot · icon tile (by type) · message + relative time
+//
+// POLISH:
+//   - Icon tiles use glass tints (matches Wave-3 pattern)
+//   - Unread bg uses glass indigo
+//   - Type scale aligned to Wave-3
+//   - focus-visible ring on row
+//   - active:scale-[0.99]
+//   - aria-hidden on decorative SVGs
+//
+// PRESERVED:
+//   - Props (notification, onClick)
+//   - getIconForType() switch (all 6 types + default)
+//   - formatRelative helper (custom, per Wave-3 convention)
 // -------------------------------------------------------------
 
 'use client';
@@ -25,13 +35,15 @@ const NotificationItem = ({ notification, onClick }) => {
       onClick={() => onClick?.(notification)}
       className={`
         w-full flex items-start gap-3 px-4 py-3 text-left
-        transition-colors
+        focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40
+        active:scale-[0.99]
+        transition-all duration-150
         hover:bg-gray-50 dark:hover:bg-white/[0.03]
-        ${!isRead ? 'bg-indigo-50/40 dark:bg-indigo-500/[0.06]' : ''}
+        ${!isRead ? 'bg-indigo-500/[0.04] dark:bg-indigo-500/[0.06]' : ''}
       `}
     >
       {/* Unread dot */}
-      <span className="w-2 pt-2.5 flex-shrink-0">
+      <span className="w-2 pt-2.5 flex-shrink-0" aria-hidden="true">
         {!isRead && (
           <span className="block w-2 h-2 rounded-full bg-indigo-500" />
         )}
@@ -43,6 +55,7 @@ const NotificationItem = ({ notification, onClick }) => {
           w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0
           ${icon.bg}
         `}
+        aria-hidden="true"
       >
         {icon.svg}
       </span>
@@ -51,7 +64,7 @@ const NotificationItem = ({ notification, onClick }) => {
       <span className="flex-1 min-w-0">
         <span
           className={`
-            block text-sm leading-snug line-clamp-3
+            block text-[13px] leading-snug line-clamp-3
             ${
               !isRead
                 ? 'text-gray-900 dark:text-white font-medium'
@@ -61,7 +74,7 @@ const NotificationItem = ({ notification, onClick }) => {
         >
           {message}
         </span>
-        <span className="block text-xs text-gray-500 dark:text-gray-500 mt-0.5">
+        <span className="block text-[11px] text-gray-500 dark:text-gray-500 mt-0.5">
           {formatRelative(createdAt)}
         </span>
       </span>
@@ -76,7 +89,7 @@ function getIconForType(type) {
   switch (type) {
     case 'TASK_COMMENTED':
       return {
-        bg: 'bg-blue-100 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400',
+        bg: 'bg-blue-500/10 dark:bg-blue-500/15 text-blue-600 dark:text-blue-400',
         svg: (
           <svg
             width="15"
@@ -84,7 +97,7 @@ function getIconForType(type) {
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
-            strokeWidth="2"
+            strokeWidth="1.8"
           >
             <path
               d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"
@@ -97,7 +110,7 @@ function getIconForType(type) {
 
     case 'TASK_STATUS_CHANGED':
       return {
-        bg: 'bg-emerald-100 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+        bg: 'bg-emerald-500/10 dark:bg-emerald-500/15 text-emerald-600 dark:text-emerald-400',
         svg: (
           <svg
             width="15"
@@ -118,7 +131,7 @@ function getIconForType(type) {
 
     case 'TASK_ASSIGNED':
       return {
-        bg: 'bg-indigo-100 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400',
+        bg: 'bg-indigo-500/10 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400',
         svg: (
           <svg
             width="15"
@@ -126,7 +139,7 @@ function getIconForType(type) {
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
-            strokeWidth="2"
+            strokeWidth="1.8"
           >
             <circle cx="12" cy="8" r="4" />
             <path d="M4 21a8 8 0 0116 0" strokeLinecap="round" />
@@ -136,7 +149,7 @@ function getIconForType(type) {
 
     case 'INVITATION_ACCEPTED':
       return {
-        bg: 'bg-amber-100 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400',
+        bg: 'bg-amber-500/10 dark:bg-amber-500/15 text-amber-600 dark:text-amber-400',
         svg: (
           <svg
             width="15"
@@ -144,7 +157,7 @@ function getIconForType(type) {
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
-            strokeWidth="2"
+            strokeWidth="1.8"
           >
             <path
               d="M22 11.08V12a10 10 0 11-5.93-9.14"
@@ -162,7 +175,7 @@ function getIconForType(type) {
 
     case 'PROJECT_ADDED':
       return {
-        bg: 'bg-violet-100 dark:bg-violet-500/10 text-violet-600 dark:text-violet-400',
+        bg: 'bg-violet-500/10 dark:bg-violet-500/15 text-violet-600 dark:text-violet-400',
         svg: (
           <svg
             width="15"
@@ -170,7 +183,7 @@ function getIconForType(type) {
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
-            strokeWidth="2"
+            strokeWidth="1.8"
           >
             <path
               d="M3 6.5A2.5 2.5 0 015.5 4H10l2 2h6.5A2.5 2.5 0 0121 8.5v9A2.5 2.5 0 0118.5 20h-13A2.5 2.5 0 013 17.5v-11z"
@@ -183,7 +196,7 @@ function getIconForType(type) {
 
     default:
       return {
-        bg: 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400',
+        bg: 'bg-gray-100 dark:bg-white/[0.04] text-gray-500 dark:text-gray-400',
         svg: (
           <svg
             width="15"
@@ -191,7 +204,7 @@ function getIconForType(type) {
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
-            strokeWidth="2"
+            strokeWidth="1.8"
           >
             <circle cx="12" cy="12" r="10" />
             <path d="M12 8v4M12 16h.01" strokeLinecap="round" />
@@ -202,7 +215,7 @@ function getIconForType(type) {
 }
 
 // =============================================================
-// formatRelative
+// formatRelative - custom helper (per project convention)
 // =============================================================
 function formatRelative(isoString) {
   const then = new Date(isoString).getTime();

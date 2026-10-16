@@ -2,18 +2,29 @@
 // Auth Layout - Centered shell for /login and /register
 // -------------------------------------------------------------
 //
-// LAYOUT:
-//   Full-screen background with decorative rotated text
-//   (dramatic -30° diagonal).
-//   The auth card sits centered on top.
+// WHEN USED:
+//   Wraps the /login and /register pages via the (auth) route
+//   group.
 //
-// DECORATION:
-//   Large, bold feature text, rotated -30°, with very low
-//   opacity. Hidden on small screens (too cramped).
+// STRUCTURE:
+//   Full-screen container (bg-gray-50 / dark #0a0c10)
+//     - Decorative rotated feature text layer (md+ only)
+//     - Radial vignette (fades edges so card stays readable)
+//     - Centered content wrapper (max-w-md)
 //
-// ACCESSIBILITY:
-//   The decorative layer is `aria-hidden` and pointer-events-none,
-//   so it doesn't interfere with screen readers or clicks.
+// POLISH:
+//   - `-rotate-30` → arbitrary value `-rotate-[30deg]`
+//     (not a Tailwind default)
+//   - Decorative opacity raised slightly for display safety
+//   - Removed redundant min-h-screen + sm: breakpoint on inner
+//   - Content wrapper gets defensive z-10
+//   - Header comment format aligned
+//
+// PRESERVED:
+//   - FEATURES array (unchanged)
+//   - Decorative layer (aria-hidden + pointer-events-none)
+//   - Radial vignette gradient values
+//   - Responsive behavior (hidden below md)
 // -------------------------------------------------------------
 
 const FEATURES = [
@@ -30,12 +41,15 @@ const FEATURES = [
 const AuthLayout = ({ children }) => {
   return (
     <div className="relative min-h-screen overflow-hidden bg-gray-50 dark:bg-[#0a0c10]">
-      {/* ─── Decorative background layer ─── */}
+      {/* ─── Decorative background layer (md+ only) ─── */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0 hidden md:flex items-center justify-center"
+        className="
+          pointer-events-none absolute inset-0
+          hidden md:flex items-center justify-center
+        "
       >
-        <div className="-rotate-30 flex flex-col gap-10 select-none">
+        <div className="-rotate-[30deg] flex flex-col gap-12 select-none">
           {FEATURES.map((text, i) => (
             <p
               key={text}
@@ -43,9 +57,9 @@ const AuthLayout = ({ children }) => {
                 whitespace-nowrap
                 font-black
                 tracking-tighter
-                text-gray-900 dark:text-white
-                opacity-[0.035] dark:opacity-[0.05]
                 leading-none
+                text-gray-900 dark:text-white
+                opacity-[0.04] dark:opacity-[0.06]
                 ${i % 2 === 0 ? 'text-[8rem]' : 'text-[6rem]'}
               `}
             >
@@ -57,7 +71,7 @@ const AuthLayout = ({ children }) => {
         </div>
       </div>
 
-      {/* ─── Subtle radial vignette on top of the text ─── */}
+      {/* ─── Radial vignette ─── */}
       {/* Fades the decorative text toward the edges so the
           center stays readable for the card. */}
       <div
@@ -70,7 +84,13 @@ const AuthLayout = ({ children }) => {
       />
 
       {/* ─── Content ─── */}
-      <div className="relative min-h-screen flex items-center justify-center p-4 sm:p-6">
+      <div
+        className="
+          relative z-10
+          min-h-screen flex items-center justify-center
+          p-4
+        "
+      >
         <div className="w-full max-w-md">{children}</div>
       </div>
     </div>

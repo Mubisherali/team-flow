@@ -2,26 +2,31 @@
 // MobileTopbar - Top bar shown on mobile / tablet
 // -------------------------------------------------------------
 //
-// LAYOUT:
-//   [☰]  [TF] TeamFlow         [🔔 3]   [MA]
+// WHEN USED:
+//   Rendered at the top of the (dashboard) layout on screens
+//   < 1024px. Desktop uses the sidebar instead.
 //
-// VISIBLE ONLY:
-//   < 1024px viewport. Hidden on desktop via `lg:hidden`.
+// STRUCTURE:
+//   [☰]  [logo + TeamFlow]   [🔔 N]  [avatar → dropdown]
 //
-// PROPS:
-//   user              : { id, name, email, image }
-//   onOpenSidebar     : () => void — opens the mobile drawer
+// POLISH:
+//   - Focus-visible rings on all triggers
+//   - aria-expanded / aria-haspopup on both dropdowns
+//   - AnimatePresence on notification dropdown + user menu
+//   - Glass hover surfaces use white/[0.06] (matches Wave-3)
+//   - Logo container cleaned (aspect-square, no stray sizing)
+//   - NotificationRow aligned with Wave-3 glass surfaces
+//   - Body scroll lock removed (topbar is not a full-screen
+//     overlay; it just drops dropdowns below itself)
 //
-// CONTENTS:
-//   - Hamburger button (opens drawer)
-//   - Brand link to /workspaces
-//   - Compact notification bell (icon + badge)
-//   - User avatar (opens a small dropdown)
-//
-// WHY A COMPACT BELL:
-//   The desktop <NotificationBell /> is a wide button with a
-//   label. On mobile we need just the icon + badge. So we
-//   render a compact version here that opens the same dropdown.
+// PRESERVED:
+//   - Props (user, onOpenSidebar)
+//   - All state (notifOpen, userMenuOpen, refs)
+//   - Outside-click close on user menu
+//   - handleSelectNotification / handleLogout
+//   - Inline notification dropdown (kept until Wave 7
+//     refactors to reuse <NotificationDropdown />)
+//   - formatRelative helper (kept per Wave-3 convention)
 // -------------------------------------------------------------
 
 'use client';
@@ -30,8 +35,8 @@ import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { signOut } from 'next-auth/react';
+import { motion, AnimatePresence } from 'framer-motion';
 
-import NotificationDropdown from './NotificationDropdown';
 import { useNotificationsCtx } from '@/context/NotificationsContext';
 
 const MobileTopbar = ({ user, onOpenSidebar }) => {
@@ -78,6 +83,31 @@ const MobileTopbar = ({ user, onOpenSidebar }) => {
     return () => document.removeEventListener('mousedown', handler);
   }, [userMenuOpen]);
 
+  // ─── Close notif on outside click ───
+  useEffect(() => {
+    if (!notifOpen) return;
+    const handler = (e) => {
+      if (notifWrapRef.current && !notifWrapRef.current.contains(e.target)) {
+        setNotifOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [notifOpen]);
+
+  // ─── Escape closes both ───
+  useEffect(() => {
+    if (!notifOpen && !userMenuOpen) return;
+    const handler = (e) => {
+      if (e.key === 'Escape') {
+        setNotifOpen(false);
+        setUserMenuOpen(false);
+      }
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [notifOpen, userMenuOpen]);
+
   const handleSelectNotification = (notification) => {
     if (notification.link) router.push(notification.link);
     setNotifOpen(false);
@@ -101,19 +131,21 @@ const MobileTopbar = ({ user, onOpenSidebar }) => {
         border-b border-gray-200 dark:border-white/[0.06]
       "
     >
-      {/* ─── Left: Hamburger + Brand ─── */}
+      {/* ══════════ LEFT: Hamburger + Brand ══════════ */}
       <div className="flex items-center gap-2 min-w-0">
         <button
           type="button"
           onClick={onOpenSidebar}
+          aria-label="Open menu"
           className="
-            w-9 h-9 flex items-center justify-center
+            w-9 h-9 flex items-center justify-center flex-shrink-0
             rounded-lg
             text-gray-700 dark:text-gray-300
             hover:bg-gray-100 dark:hover:bg-white/[0.06]
-            transition-colors flex-shrink-0
+            active:scale-[0.96]
+            focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40
+            transition-all duration-150
           "
-          aria-label="Open menu"
         >
           <svg
             width="18"
@@ -122,6 +154,7 @@ const MobileTopbar = ({ user, onOpenSidebar }) => {
             fill="none"
             stroke="currentColor"
             strokeWidth="2"
+            aria-hidden="true"
           >
             <path
               d="M4 6h16M4 12h16M4 18h16"
@@ -133,17 +166,28 @@ const MobileTopbar = ({ user, onOpenSidebar }) => {
 
         <Link
           href="/workspaces"
-          className="flex items-center gap-2 min-w-0"
+          className="
+            flex items-center gap-2 min-w-0
+            focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40
+            rounded-lg
+          "
         >
-          <div
-            className="
-              relative w-7 h-7 rounded-lg
-              
-            "
-          >
-            <img src="/logo.png" alt="" width={30}/>
-            <span className="absolute -right-0.5 -bottom-0.5 w-2 h-2 rounded-full bg-emerald-400 border-2 border-white dark:border-[#0b0d12]" />
-          </div>
+          <span className="relative flex-shrink-0 w-[30px] h-[30px]">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/logo.png"
+              alt=""
+              className="w-full h-full object-contain rounded-lg"
+            />
+            <span
+              aria-hidden="true"
+              className="
+                absolute -right-0.5 -bottom-0.5
+                w-2 h-2 rounded-full bg-emerald-400
+                border-2 border-white dark:border-[#0b0d12]
+              "
+            />
+          </span>
 
           <span className="text-[13px] font-bold text-gray-900 dark:text-white truncate">
             TeamFlow
@@ -151,7 +195,7 @@ const MobileTopbar = ({ user, onOpenSidebar }) => {
         </Link>
       </div>
 
-      {/* ─── Right: Bell + User ─── */}
+      {/* ══════════ RIGHT: Bell + User ══════════ */}
       <div className="flex items-center gap-1 flex-shrink-0">
         {/* ─── Bell ─── */}
         <div ref={notifWrapRef} className="relative">
@@ -161,14 +205,18 @@ const MobileTopbar = ({ user, onOpenSidebar }) => {
               setNotifOpen((v) => !v);
               setUserMenuOpen(false);
             }}
+            aria-haspopup="menu"
+            aria-expanded={notifOpen}
+            aria-label={`Notifications${hasUnread ? ` (${unreadCount} unread)` : ''}`}
             className="
               relative w-9 h-9 flex items-center justify-center
               rounded-lg
               text-gray-700 dark:text-gray-300
               hover:bg-gray-100 dark:hover:bg-white/[0.06]
-              transition-colors
+              active:scale-[0.96]
+              focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40
+              transition-all duration-150
             "
-            aria-label={`Notifications${hasUnread ? ` (${unreadCount} unread)` : ''}`}
           >
             <svg
               width="18"
@@ -177,6 +225,7 @@ const MobileTopbar = ({ user, onOpenSidebar }) => {
               fill="none"
               stroke="currentColor"
               strokeWidth="1.8"
+              aria-hidden="true"
             >
               <path
                 d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"
@@ -207,91 +256,127 @@ const MobileTopbar = ({ user, onOpenSidebar }) => {
             )}
           </button>
 
-          {/* Notification dropdown — anchored below the icon.
-              We reuse <NotificationDropdown /> which handles
-              the content. But its positioning is designed for
-              the sidebar (bottom-full). On mobile we want it
-              below. We wrap it in a small custom container. */}
-          {notifOpen && (
-            <div
-              className="
-                absolute top-full right-0 mt-2 z-50
-                w-[calc(100vw-24px)] max-w-sm
-                rounded-2xl overflow-hidden
-                bg-white dark:bg-[#111318]
-                border border-gray-200 dark:border-white/[0.08]
-                shadow-2xl shadow-black/20 dark:shadow-black/50
-              "
-            >
-              {/* Header */}
-              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-white/[0.06]">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
-                    Notifications
-                  </h3>
+          {/* Notification dropdown */}
+          <AnimatePresence>
+            {notifOpen && (
+              <motion.div
+                key="mobile-notif-dropdown"
+                initial={{ opacity: 0, scale: 0.96, y: -4 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.97, y: -2 }}
+                transition={{ duration: 0.15, ease: 'easeOut' }}
+                role="menu"
+                className="
+                  absolute top-full right-0 mt-2 z-50
+                  w-[calc(100vw-24px)] max-w-sm
+                  rounded-2xl overflow-hidden
+                  bg-white dark:bg-[#111318]
+                  border border-gray-200 dark:border-white/[0.08]
+                  shadow-2xl shadow-black/20 dark:shadow-black/50
+                "
+              >
+                {/* Header */}
+                <div
+                  className="
+                    flex items-center justify-between
+                    px-4 py-3
+                    border-b border-gray-200 dark:border-white/[0.06]
+                  "
+                >
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-[13px] font-semibold text-gray-900 dark:text-white">
+                      Notifications
+                    </h3>
+                    {hasUnread && (
+                      <span
+                        className="
+                          text-[10px] font-bold px-1.5 py-0.5 rounded-md
+                          bg-indigo-500/10 dark:bg-indigo-500/15
+                          text-indigo-700 dark:text-indigo-300
+                        "
+                      >
+                        {unreadCount}
+                      </span>
+                    )}
+                  </div>
                   {hasUnread && (
-                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-indigo-100 dark:bg-indigo-500/15 text-indigo-700 dark:text-indigo-300">
-                      {unreadCount}
-                    </span>
+                    <button
+                      type="button"
+                      onClick={markAllRead}
+                      className="
+                        text-[11.5px] font-medium
+                        text-indigo-600 dark:text-indigo-400
+                        hover:text-indigo-700 dark:hover:text-indigo-300
+                        focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40
+                        rounded
+                        transition-colors duration-150
+                      "
+                    >
+                      Mark all as read
+                    </button>
                   )}
                 </div>
-                {hasUnread && (
-                  <button
-                    type="button"
-                    onClick={markAllRead}
-                    className="text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors"
-                  >
-                    Mark all as read
-                  </button>
-                )}
-              </div>
 
-              {/* Body */}
-              <div className="max-h-80 overflow-y-auto">
-                {loading && notifications.length === 0 ? (
-                  <div className="flex items-center justify-center py-10">
-                    <span className="w-5 h-5 border-2 border-gray-300 dark:border-gray-700 border-t-gray-500 dark:border-t-gray-400 rounded-full animate-spin" />
-                  </div>
-                ) : notifications.length === 0 ? (
-                  <div className="py-10 px-6 text-center">
-                    <div className="w-10 h-10 mx-auto mb-2 rounded-full bg-emerald-50 dark:bg-emerald-500/10 flex items-center justify-center">
-                      <svg
-                        width="16"
-                        height="16"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2.5"
-                        className="text-emerald-600 dark:text-emerald-400"
-                      >
-                        <path
-                          d="M20 6L9 17l-5-5"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
-                    </div>
-                    <p className="text-sm font-medium text-gray-900 dark:text-white">
-                      You&apos;re all caught up
-                    </p>
-                  </div>
-                ) : (
-                  <div className="divide-y divide-gray-100 dark:divide-white/[0.04]">
-                    {notifications.map((n) => (
-                      <NotificationRow
-                        key={n.id}
-                        notification={n}
-                        onClick={() => {
-                          if (!n.isRead) markRead(n.id);
-                          handleSelectNotification(n);
-                        }}
+                {/* Body */}
+                <div className="max-h-80 overflow-y-auto">
+                  {loading && notifications.length === 0 ? (
+                    <div className="flex items-center justify-center py-10">
+                      <span
+                        className="
+                          w-5 h-5 rounded-full animate-spin
+                          border-2 border-gray-300 dark:border-white/10
+                          border-t-gray-500 dark:border-t-gray-400
+                        "
                       />
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
+                    </div>
+                  ) : notifications.length === 0 ? (
+                    <div className="py-10 px-6 text-center">
+                      <div
+                        className="
+                          w-10 h-10 mx-auto mb-2 rounded-full
+                          bg-emerald-500/10 dark:bg-emerald-500/15
+                          flex items-center justify-center
+                        "
+                        aria-hidden="true"
+                      >
+                        <svg
+                          width="16"
+                          height="16"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2.5"
+                          className="text-emerald-600 dark:text-emerald-400"
+                        >
+                          <path
+                            d="M20 6L9 17l-5-5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      </div>
+                      <p className="text-[13px] font-medium text-gray-900 dark:text-white">
+                        You&apos;re all caught up
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-gray-100 dark:divide-white/[0.04]">
+                      {notifications.map((n) => (
+                        <NotificationRow
+                          key={n.id}
+                          notification={n}
+                          onClick={() => {
+                            if (!n.isRead) markRead(n.id);
+                            handleSelectNotification(n);
+                          }}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
         {/* ─── User avatar ─── */}
@@ -302,13 +387,16 @@ const MobileTopbar = ({ user, onOpenSidebar }) => {
               setUserMenuOpen((v) => !v);
               setNotifOpen(false);
             }}
-            className="
-              w-9 h-9 rounded-full overflow-hidden
-              flex-shrink-0
-              hover:ring-2 hover:ring-indigo-500/30
-              transition-all
-            "
+            aria-haspopup="menu"
+            aria-expanded={userMenuOpen}
             aria-label="Open user menu"
+            className="
+              w-9 h-9 rounded-full overflow-hidden flex-shrink-0
+              hover:ring-2 hover:ring-indigo-500/30
+              active:scale-[0.96]
+              focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40
+              transition-all duration-150
+            "
           >
             {safeUser.image ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -318,61 +406,86 @@ const MobileTopbar = ({ user, onOpenSidebar }) => {
                 className="w-full h-full object-cover"
               />
             ) : (
-              <div className="w-full h-full bg-gradient-to-br from-indigo-500 to-violet-600 text-white flex items-center justify-center text-[11px] font-bold">
+              <div
+                className="
+                  w-full h-full
+                  bg-gradient-to-br from-indigo-500 to-violet-600
+                  text-white
+                  flex items-center justify-center
+                  text-[11px] font-bold
+                "
+                aria-hidden="true"
+              >
                 {getInitials(safeUser.name)}
               </div>
             )}
           </button>
 
-          {/* Small user dropdown */}
-          {userMenuOpen && (
-            <div
-              className="
-                absolute top-full right-0 mt-2 z-50
-                w-56
-                rounded-2xl overflow-hidden
-                bg-white dark:bg-[#111318]
-                border border-gray-200 dark:border-white/[0.08]
-                shadow-2xl shadow-black/20 dark:shadow-black/50
-                p-1.5
-              "
-            >
-              <div className="px-3 py-2.5 border-b border-gray-100 dark:border-white/[0.06] mb-1">
-                <p className="text-[13px] font-semibold text-gray-900 dark:text-white truncate">
-                  {safeUser.name || 'User'}
-                </p>
-                <p className="text-[10.5px] text-gray-500 dark:text-gray-500 truncate mt-0.5">
-                  {safeUser.email || ''}
-                </p>
-              </div>
-
-              <Link
-                href="/settings/profile"
-                onClick={() => setUserMenuOpen(false)}
+          {/* User menu */}
+          <AnimatePresence>
+            {userMenuOpen && (
+              <motion.div
+                key="mobile-user-menu"
+                initial={{ opacity: 0, scale: 0.96, y: -4 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.97, y: -2 }}
+                transition={{ duration: 0.15, ease: 'easeOut' }}
+                role="menu"
                 className="
-                  flex items-center gap-2 px-3 py-2 rounded-xl
-                  text-[13px] text-gray-700 dark:text-gray-300
-                  hover:bg-gray-100 dark:hover:bg-white/[0.05]
-                  transition-colors
+                  absolute top-full right-0 mt-2 z-50
+                  w-56
+                  rounded-2xl overflow-hidden
+                  bg-white dark:bg-[#111318]
+                  border border-gray-200 dark:border-white/[0.08]
+                  shadow-2xl shadow-black/20 dark:shadow-black/50
+                  p-1.5
                 "
               >
-                Profile settings
-              </Link>
+                <div className="px-3 py-2.5 border-b border-gray-100 dark:border-white/[0.06] mb-1">
+                  <p className="text-[13px] font-semibold text-gray-900 dark:text-white truncate">
+                    {safeUser.name || 'User'}
+                  </p>
+                  <p className="text-[10.5px] text-gray-500 dark:text-gray-500 truncate mt-0.5">
+                    {safeUser.email || ''}
+                  </p>
+                </div>
 
-              <button
-                type="button"
-                onClick={handleLogout}
-                className="
-                  w-full flex items-center gap-2 px-3 py-2 rounded-xl
-                  text-[13px] text-red-600 dark:text-red-400
-                  hover:bg-red-50 dark:hover:bg-red-500/10
-                  transition-colors
-                "
-              >
-                Log out
-              </button>
-            </div>
-          )}
+                <Link
+                  href="/settings/profile"
+                  role="menuitem"
+                  onClick={() => setUserMenuOpen(false)}
+                  className="
+                    flex items-center gap-2
+                    px-3 py-2 rounded-xl
+                    text-[13px] text-gray-700 dark:text-gray-300
+                    hover:bg-gray-100 dark:hover:bg-white/[0.05]
+                    focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40
+                    active:scale-[0.99]
+                    transition-all duration-150
+                  "
+                >
+                  Profile settings
+                </Link>
+
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={handleLogout}
+                  className="
+                    w-full flex items-center gap-2
+                    px-3 py-2 rounded-xl
+                    text-[13px] text-red-600 dark:text-red-400
+                    hover:bg-red-50 dark:hover:bg-red-500/10
+                    focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500/40
+                    active:scale-[0.99]
+                    transition-all duration-150
+                  "
+                >
+                  Log out
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
     </header>
@@ -388,13 +501,13 @@ const NotificationRow = ({ notification, onClick }) => {
   const iconColor = (() => {
     switch (type) {
       case 'TASK_COMMENTED':
-        return 'bg-blue-100 dark:bg-blue-500/15 text-blue-600 dark:text-blue-400';
+        return 'bg-blue-500/10 dark:bg-blue-500/15 text-blue-600 dark:text-blue-400';
       case 'TASK_STATUS_CHANGED':
-        return 'bg-emerald-100 dark:bg-emerald-500/15 text-emerald-600 dark:text-emerald-400';
+        return 'bg-emerald-500/10 dark:bg-emerald-500/15 text-emerald-600 dark:text-emerald-400';
       case 'TASK_ASSIGNED':
-        return 'bg-indigo-100 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400';
+        return 'bg-indigo-500/10 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400';
       default:
-        return 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400';
+        return 'bg-gray-100 dark:bg-white/[0.04] text-gray-500 dark:text-gray-400';
     }
   })();
 
@@ -404,19 +517,25 @@ const NotificationRow = ({ notification, onClick }) => {
       onClick={onClick}
       className={`
         w-full flex items-start gap-3 px-4 py-3 text-left
-        transition-colors
+        focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40
+        transition-colors duration-150
         hover:bg-gray-50 dark:hover:bg-white/[0.03]
-        ${!isRead ? 'bg-indigo-50/40 dark:bg-indigo-500/[0.06]' : ''}
+        ${!isRead ? 'bg-indigo-500/[0.04] dark:bg-indigo-500/[0.06]' : ''}
       `}
     >
-      <span className="w-2 pt-2 flex-shrink-0">
+      <span className="w-2 pt-2 flex-shrink-0" aria-hidden="true">
         {!isRead && (
           <span className="block w-2 h-2 rounded-full bg-indigo-500" />
         )}
       </span>
 
       <span
-        className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${iconColor}`}
+        className={`
+          w-8 h-8 rounded-lg flex-shrink-0
+          flex items-center justify-center
+          ${iconColor}
+        `}
+        aria-hidden="true"
       >
         <svg
           width="14"
@@ -424,7 +543,7 @@ const NotificationRow = ({ notification, onClick }) => {
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
-          strokeWidth="2"
+          strokeWidth="1.8"
         >
           <path
             d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"
@@ -441,11 +560,14 @@ const NotificationRow = ({ notification, onClick }) => {
 
       <span className="flex-1 min-w-0">
         <span
-          className={`block text-[13px] leading-snug line-clamp-3 ${
-            !isRead
-              ? 'text-gray-900 dark:text-white font-medium'
-              : 'text-gray-600 dark:text-gray-400'
-          }`}
+          className={`
+            block text-[13px] leading-snug line-clamp-3
+            ${
+              !isRead
+                ? 'text-gray-900 dark:text-white font-medium'
+                : 'text-gray-600 dark:text-gray-400'
+            }
+          `}
         >
           {message}
         </span>
@@ -458,7 +580,7 @@ const NotificationRow = ({ notification, onClick }) => {
 };
 
 // =============================================================
-// formatRelative
+// formatRelative - custom helper (kept per Wave-3 convention)
 // =============================================================
 function formatRelative(isoString) {
   const then = new Date(isoString).getTime();
