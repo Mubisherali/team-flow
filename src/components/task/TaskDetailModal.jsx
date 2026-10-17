@@ -2,29 +2,11 @@
 // TaskDetailModal - Compact modal editor for a task
 // -------------------------------------------------------------
 //
-// WHEN USED:
-//   Click a Kanban card → opens this modal.
-//   Full task editing lives on the task page (via the ⋯ menu).
+// (header preserved — plus PERMISSIONS note below)
 //
-// STRUCTURE:
-//   Backdrop (animated) → Modal card (animated)
-//     - Header (status + save indicator + delete + close)
-//     - Body (<TaskFields>)
-//     - Delete confirmation overlay (animated)
-//
-// POLISH:
-//   - Framer Motion entry + exit
-//   - Softer backdrop with heavier blur
-//   - Body scroll lock while open
-//   - Refined header spacing
-//   - Glass dark mode
-//   - Responsive padding
-//
-// PRESERVED:
-//   - Same props
-//   - Same state (saveState/saveError/isDeleting/showDeleteConfirm)
-//   - Escape key closes
-//   - TaskFields is still the field editor
+// PERMISSIONS:
+//   canEdit   — assignee OR creator OR owner/manager
+//   canDelete — owner/manager ONLY (delete is destructive)
 // -------------------------------------------------------------
 
 'use client';
@@ -43,6 +25,7 @@ const TaskDetailModal = ({
   task,
   projectMembers,
   canEdit,
+  canDelete,
   currentUserId,
   currentUserRole,
   onUpdated,
@@ -69,7 +52,7 @@ const TaskDetailModal = ({
     setTimeout(() => titleRef.current?.focus(), 100);
   }, [task?.id]);
 
-  // ─── Clear the "Saved" indicator after a moment ───
+  // ─── Clear "Saved" indicator ───
   useEffect(() => {
     if (saveState === 'saved') {
       savedTimerRef.current = setTimeout(() => setSaveState('idle'), 1500);
@@ -89,7 +72,7 @@ const TaskDetailModal = ({
     return () => window.removeEventListener('keydown', handleKey);
   }, [isVisible, saveState, isDeleting, onClose]);
 
-  // ─── Lock body scroll while modal is open ───
+  // ─── Body scroll lock ───
   useEffect(() => {
     if (!isVisible) return;
     const prev = document.body.style.overflow;
@@ -99,9 +82,7 @@ const TaskDetailModal = ({
     };
   }, [isVisible]);
 
-  // -----------------------------------------------------------
-  // DELETE
-  // -----------------------------------------------------------
+  // ─── Delete ───
   const handleDelete = async () => {
     if (!task) return;
     setIsDeleting(true);
@@ -132,9 +113,6 @@ const TaskDetailModal = ({
 
   const statusInfo = task ? statusMeta(task.status) : null;
 
-  // -----------------------------------------------------------
-  // RENDER
-  // -----------------------------------------------------------
   return (
     <AnimatePresence>
       {isVisible && (
@@ -155,7 +133,6 @@ const TaskDetailModal = ({
           role="dialog"
           aria-modal="true"
         >
-          {/* ─── Modal card ─── */}
           <motion.div
             initial={{ opacity: 0, scale: 0.96, y: 8 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -181,7 +158,6 @@ const TaskDetailModal = ({
                 border-b border-gray-200 dark:border-white/[0.06]
               "
             >
-              {/* Left: status + save indicator */}
               <div className="flex items-center gap-2.5 min-w-0">
                 <span
                   className={`w-2 h-2 rounded-full flex-shrink-0 ${statusInfo.dot}`}
@@ -192,9 +168,8 @@ const TaskDetailModal = ({
                 <SaveIndicator state={saveState} />
               </div>
 
-              {/* Right: actions */}
               <div className="flex items-center gap-1 flex-shrink-0">
-                {canEdit && (
+                {canDelete && (
                   <button
                     type="button"
                     onClick={() => setShowDeleteConfirm(true)}
@@ -297,7 +272,7 @@ const TaskDetailModal = ({
 };
 
 // =============================================================
-// SaveIndicator - small "Saving..." / "Saved" text
+// SaveIndicator (unchanged)
 // =============================================================
 const SaveIndicator = ({ state }) => {
   if (state === 'idle') return null;
@@ -337,7 +312,7 @@ const SaveIndicator = ({ state }) => {
 };
 
 // =============================================================
-// DeleteConfirmOverlay - full-modal overlay with animation
+// DeleteConfirmOverlay (unchanged)
 // =============================================================
 const DeleteConfirmOverlay = ({
   taskTitle,
@@ -365,7 +340,6 @@ const DeleteConfirmOverlay = ({
       transition={{ duration: 0.18, ease: 'easeOut' }}
       className="text-center max-w-sm"
     >
-      {/* Warning icon */}
       <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-red-100 dark:bg-red-500/15 flex items-center justify-center">
         <svg
           width="20"

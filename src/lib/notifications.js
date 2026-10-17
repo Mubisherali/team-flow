@@ -5,16 +5,15 @@
 // USED BY:
 //   - Task creation (notify on assign)
 //   - Task PATCH    (notify on reassign / status change)
+//   - Task PATCH    (notify managers when moved to REVIEW)
 //   - Comment POST  (notify on comment)
 //   - Invitation POST   (notify existing user of incoming invite)
 //   - Invitation accept (notify inviter)
 //   - Invitation decline (notify inviter)
+//   - Project member add (notify the added user)
 //
 // DESIGN:
 //   createNotification() is FIRE-AND-FORGET. It never throws.
-//   If the DB write fails, we log it and move on. The primary
-//   action (create task, post comment) must not fail just
-//   because a notification couldn't be created.
 // -------------------------------------------------------------
 
 import { prisma } from '@/lib/prisma';
@@ -22,11 +21,6 @@ import { prisma } from '@/lib/prisma';
 // -------------------------------------------------------------
 // CREATE NOTIFICATION
 // -------------------------------------------------------------
-// Low-level helper. Inserts one row. Never throws.
-//
-// Caller: pass userId (recipient), type, message, link.
-// Returns: { ok: true } or { ok: false, error } — but the
-// caller usually ignores the return value.
 export async function createNotification({
   userId,
   type,
@@ -50,7 +44,6 @@ export async function createNotification({
 
     return { ok: true };
   } catch (err) {
-    // Swallow the error. Log it so we can spot patterns.
     console.error('[notify] Failed to create notification', err);
     return { ok: false, error: err.message };
   }
@@ -59,23 +52,6 @@ export async function createNotification({
 // -------------------------------------------------------------
 // NOTIFY TASK EVENT
 // -------------------------------------------------------------
-// Higher-level helper. Given a task + actor + event info,
-// computes WHO should be notified and calls createNotification
-// for each.
-//
-// RULES:
-//   - Skip the actor (don't notify yourself)
-//   - Notify the assignee (if different from actor)
-//   - Notify the creator (if different from actor AND assignee)
-//     → deduped so a single person gets one notification
-//
-// PARAMS:
-//   task      : task with { id, title, projectId, assigneeId, createdById }
-//   workspaceId : string (for building the link)
-//   actorId   : string (who did the action)
-//   actorName : string (display name)
-//   event     : 'assigned' | 'reassigned' | 'status_changed' | 'commented'
-//   extra     : optional, e.g. { statusLabel: 'Review' }
 export async function notifyTaskEvent({
   task,
   workspaceId,
@@ -86,10 +62,8 @@ export async function notifyTaskEvent({
 }) {
   if (!task || !workspaceId || !actorId) return;
 
-  // Build the deep link to the task page
   const link = `/workspaces/${workspaceId}/projects/${task.projectId}/tasks/${task.id}`;
 
-  // Decide message text based on event
   let message;
   if (event === 'assigned') {
     message = `${actorName} assigned you to "${task.title}"`;
@@ -104,7 +78,6 @@ export async function notifyTaskEvent({
     message = `${actorName} updated "${task.title}"`;
   }
 
-  // Build the recipient set (deduped, no self)
   const recipients = new Set();
 
   if (task.assigneeId && task.assigneeId !== actorId) {
@@ -118,10 +91,8 @@ export async function notifyTaskEvent({
     recipients.add(task.createdById);
   }
 
-  // Nothing to notify (e.g., actor is the only person involved)
   if (recipients.size === 0) return;
 
-  // Map event → notification type
   const type =
     event === 'assigned' || event === 'reassigned'
       ? 'TASK_ASSIGNED'
@@ -131,7 +102,6 @@ export async function notifyTaskEvent({
           ? 'TASK_COMMENTED'
           : 'TASK_ASSIGNED';
 
-  // Fire-and-forget for each recipient
   await Promise.all(
     Array.from(recipients).map((userId) =>
       createNotification({ userId, type, message, link })
@@ -142,26 +112,6 @@ export async function notifyTaskEvent({
 // -------------------------------------------------------------
 // NOTIFY INVITATION EVENT
 // -------------------------------------------------------------
-// Higher-level helper for invitation lifecycle events.
-//
-// EVENTS:
-//   'received' → notify the invited user (only if they already
-//                have an account — otherwise no userId exists)
-//   'accepted' → notify the inviter
-//   'declined' → notify the inviter
-//
-// DEDUP:
-//   For 'received', we skip creating a duplicate if there's
-//   already an unread INVITATION_RECEIVED notification for the
-//   same link in the last hour. Prevents spam when the same
-//   invite is re-issued quickly.
-//
-// PARAMS:
-//   event        : 'received' | 'accepted' | 'declined'
-//   recipientId  : string (userId of the person to notify)
-//   workspace    : { id, name }
-//   actorName    : string (display name of the person doing the action)
-//   invitation   : { id, email, role } — used for link + message
 export async function notifyInvitationEvent({
   event,
   recipientId,
@@ -171,11 +121,6 @@ export async function notifyInvitationEvent({
 }) {
   if (!event || !recipientId || !workspace) return;
 
-  // Build the deep link.
-  // 'received' → the invitee should land on the invitations page
-  //   so they can accept or decline from there.
-  // 'accepted' / 'declined' → the inviter should land on the
-  //   workspace members page to see the updated list.
   const link =
     event === 'received'
       ? '/invitations'
@@ -199,9 +144,6 @@ export async function notifyInvitationEvent({
     return;
   }
 
-  // ─── Dedup for 'received' ───
-  // If an unread INVITATION_RECEIVED notification already exists
-  // for the same link in the last hour, skip.
   if (event === 'received') {
     try {
       const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
@@ -216,8 +158,6 @@ export async function notifyInvitationEvent({
       });
       if (existing) return;
     } catch (err) {
-      // If dedup check fails, proceed anyway (better to notify
-      // twice than to silently skip).
       console.error('[notify] Dedup check failed', err);
     }
   }
@@ -228,4 +168,91 @@ export async function notifyInvitationEvent({
     message,
     link,
   });
+}
+
+// -------------------------------------------------------------
+// NOTIFY PROJECT EVENT
+// -------------------------------------------------------------
+export async function notifyProjectEvent({
+  event,
+  recipientId,
+  actorId,
+  actorName,
+  workspace,
+  project,
+}) {
+  if (event !== 'member_added') return;
+  if (!recipientId || !workspace || !project) return;
+
+  if (recipientId === actorId) return;
+
+  const link = `/workspaces/${workspace.id}/projects/${project.id}`;
+  const message = `${actorName} added you to "${project.name}" in ${workspace.name}`;
+
+  await createNotification({
+    userId: recipientId,
+    type: 'PROJECT_ADDED',
+    message,
+    link,
+  });
+}
+
+// -------------------------------------------------------------
+// NOTIFY REVIEW SUBMITTED
+// -------------------------------------------------------------
+// Higher-level helper. Called when a MEMBER moves a task to
+// REVIEW. Notifies every OWNER/MANAGER in the workspace so any
+// manager who's available can review and approve.
+//
+// RULES:
+//   - Skip the actor (they're the one submitting, no self-notify)
+//   - Skip if the actor is already a manager/owner (they ARE
+//     the reviewer — no one else needs to be paged)
+//   - Notify ALL privileged members (owners + managers) —
+//     managers are a team; whoever's awake handles it
+//   - No dedup — each transition to REVIEW is a distinct event
+//
+// PARAMS:
+//   task         : { id, projectId, title }
+//   workspaceId  : string
+//   actorId      : string (who submitted)
+//   actorName    : string
+//   actorIsPrivileged : boolean — if true, skip entirely
+export async function notifyReviewSubmitted({
+  task,
+  workspaceId,
+  actorId,
+  actorName,
+  actorIsPrivileged,
+}) {
+  if (!task || !workspaceId || !actorId) return;
+
+  // Only members trigger this — managers are their own reviewers.
+  if (actorIsPrivileged) return;
+
+  // Find all owners/managers in this workspace except the actor.
+  const privilegedMembers = await prisma.workspaceMember.findMany({
+    where: {
+      workspaceId,
+      role: { in: ['OWNER', 'MANAGER'] },
+      userId: { not: actorId },
+    },
+    select: { userId: true },
+  });
+
+  if (privilegedMembers.length === 0) return;
+
+  const link = `/workspaces/${workspaceId}/projects/${task.projectId}/tasks/${task.id}`;
+  const message = `${actorName} submitted "${task.title}" for review`;
+
+  await Promise.all(
+    privilegedMembers.map((m) =>
+      createNotification({
+        userId: m.userId,
+        type: 'TASK_MOVED_TO_REVIEW',
+        message,
+        link,
+      })
+    )
+  );
 }

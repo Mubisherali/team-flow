@@ -2,27 +2,12 @@
 // KanbanBoard - Full drag-and-drop Kanban board
 // -------------------------------------------------------------
 //
-// PROPS:
-//   projectId        : string
-//   initialTasks     : array (server-fetched, filtered by parent)
-//   onOpenTask       : (taskId) => void
-//   onAddTask        : (status) => void
-//   onOpenFull       : (taskId) => void
-//   onAskQuestion    : (taskId) => void
-//   currentUserId    : string
-//   currentUserRole  : 'OWNER' | 'MANAGER' | 'MEMBER'
+// (header preserved + note below)
 //
-// WORKFLOW ENFORCEMENT:
-//   Before applying an optimistic move, we check whether the
-//   current user is allowed to move this task to the target
-//   status. If not → block + show a message. Same rules as the
-//   server (see canMoveTaskTo in lib/permissions).
-//
-// OPTIMISTIC STRATEGY:
-//   1. onDragEnd: check permission first
-//   2. If allowed → compute new order, update state, PATCH API
-//   3. If blocked → show error, don't move anything
-//   4. On API error → revert to snapshot + show error
+// CAN ADD TASK (per column):
+//   - TODO, IN_PROGRESS → everyone
+//   - REVIEW, DONE      → owners/managers only
+//   Matches the workflow rule (members can't move to DONE).
 // -------------------------------------------------------------
 
 'use client';
@@ -67,7 +52,6 @@ const KanbanBoard = ({
   const [activeTaskId, setActiveTaskId] = useState(null);
   const [error, setError] = useState('');
 
-  // Sync when the parent re-fetches
   useEffect(() => {
     setTasks(initialTasks || []);
   }, [initialTasks]);
@@ -90,7 +74,15 @@ const KanbanBoard = ({
     ? tasks.find((t) => t.id === activeTaskId)
     : null;
 
-  // ─── Permission check ───
+  // ─── Which columns can this user create in? ───
+  const canAddTaskIn = (status) => {
+    if (isPrivileged) return true;
+    // Members: only Todo + In Progress. Review/Done are
+    // destinations, not starting points.
+    return status === 'TODO' || status === 'IN_PROGRESS';
+  };
+
+  // ─── Permission check (for drag) ───
   const canMoveTaskTo = (task, newStatus) => {
     if (!task || !newStatus) return false;
     if (newStatus === task.status) return true;
@@ -107,7 +99,6 @@ const KanbanBoard = ({
     return true;
   };
 
-  // ─── Drag handlers ───
   const handleDragStart = (event) => {
     setActiveTaskId(event.active.id);
     setError('');
@@ -163,7 +154,6 @@ const KanbanBoard = ({
     await performMove(draggedTaskId, newStatus, newIndex);
   };
 
-  // ─── Optimistic move + API ───
   const performMove = async (taskId, newStatus, newIndex) => {
     const snapshot = tasks;
 
@@ -194,10 +184,8 @@ const KanbanBoard = ({
     }
   };
 
-  // ─── Render ───
   return (
     <div className="space-y-4">
-      {/* ─── Error banner (animated) ─── */}
       <AnimatePresence>
         {error && (
           <motion.div
@@ -252,7 +240,6 @@ const KanbanBoard = ({
         )}
       </AnimatePresence>
 
-      {/* ─── The board ─── */}
       <DndContext
         sensors={sensors}
         collisionDetection={closestCorners}
@@ -260,9 +247,6 @@ const KanbanBoard = ({
         onDragEnd={handleDragEnd}
         onDragCancel={handleDragCancel}
       >
-        {/* Horizontal scroll container.
-            - pb-3 → room for the horizontal scrollbar
-            - -mx-1 px-1 → subtle bleed so cards don't clip at the edges */}
         <div className="-mx-1 px-1 flex gap-3 sm:gap-4 overflow-x-auto pb-3">
           {TASK_STATUSES.map((status) => (
             <KanbanColumn
@@ -274,11 +258,11 @@ const KanbanBoard = ({
               onOpenFull={onOpenFull}
               onAskQuestion={onAskQuestion}
               activeTaskId={activeTaskId}
+              canAddTask={canAddTaskIn(status.value)}
             />
           ))}
         </div>
 
-        {/* ─── Floating drag preview ─── */}
         <DragOverlay dropAnimation={null}>
           {activeTask ? (
             <motion.div

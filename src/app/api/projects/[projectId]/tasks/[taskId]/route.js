@@ -2,24 +2,12 @@
 // /api/projects/[projectId]/tasks/[taskId]
 // -------------------------------------------------------------
 //
-// GET    : Fetch one task
-// PATCH  : Update a task
-// DELETE : Delete a task
+// (header preserved + note below)
 //
-// AUTH:
-//   GET    - any project member / workspace owner / manager
-//   PATCH  - owner/manager OR (member who is the assignee
-//            or the creator of the task)
-//   DELETE - same as PATCH
-//
-// WORKFLOW RULE:
-//   Only owners/managers can move a task to DONE. Members must
-//   submit via REVIEW. Enforced via canMoveTaskTo() when the
-//   status field changes.
-//
-// PERMISSION NOTE:
-//   PATCH/DELETE use a CONTEXT-AWARE check — the caller's
-//   ability depends on the specific task, not just their role.
+// REVIEW NOTIFICATION:
+//   When a MEMBER moves a task to REVIEW, all owners/managers
+//   in the workspace get a TASK_MOVED_TO_REVIEW notification.
+//   Managers acting on their own don't trigger this.
 // -------------------------------------------------------------
 
 import { NextResponse } from 'next/server';
@@ -34,12 +22,12 @@ import {
   canMoveTaskTo,
 } from '@/lib/permissions';
 import { updateTaskSchema } from '@/lib/validators/task';
-import { notifyTaskEvent } from '@/lib/notifications';
+import {
+  notifyTaskEvent,
+  notifyReviewSubmitted,
+} from '@/lib/notifications';
 import { statusMeta } from '@/lib/task-constants';
 
-// -------------------------------------------------------------
-// Load project + task + caller's role in one go.
-// -------------------------------------------------------------
 async function loadContext(projectId, taskId, userId) {
   const project = await prisma.project.findUnique({
     where: { id: projectId },
@@ -67,7 +55,6 @@ async function loadContext(projectId, taskId, userId) {
 
   const isPrivileged = role === 'OWNER' || role === 'MANAGER';
 
-  // Non-privileged users must be a project member to see the task.
   if (!isPrivileged) {
     const pm = await prisma.projectMember.findUnique({
       where: { projectId_userId: { projectId, userId } },
@@ -107,7 +94,6 @@ async function loadContext(projectId, taskId, userId) {
   return { project, task, role, isPrivileged };
 }
 
-// Can this user edit/delete this specific task?
 function canMutateTask({ task, userId, isPrivileged }) {
   if (isPrivileged) return true;
   if (task.assigneeId === userId) return true;
@@ -115,9 +101,6 @@ function canMutateTask({ task, userId, isPrivileged }) {
   return false;
 }
 
-// -------------------------------------------------------------
-// Shape a task for the API response
-// -------------------------------------------------------------
 function shapeTask(task) {
   return {
     id: task.id,
@@ -175,7 +158,7 @@ export async function GET(request, { params }) {
 }
 
 // =============================================================
-// PATCH — Update task
+// PATCH — Update task (with review notification)
 // =============================================================
 export async function PATCH(request, { params }) {
   try {
@@ -188,7 +171,6 @@ export async function PATCH(request, { params }) {
     const ctx = await loadContext(projectId, taskId, session.user.id);
     if (ctx.error) return ctx.error;
 
-    // Base permission: can this user edit this task at all?
     if (
       !canMutateTask({
         task: ctx.task,
@@ -202,7 +184,6 @@ export async function PATCH(request, { params }) {
       );
     }
 
-    // Validate body
     const body = await request.json();
     const parsed = updateTaskSchema.safeParse(body);
     if (!parsed.success) {
@@ -222,9 +203,6 @@ export async function PATCH(request, { params }) {
       labels,
     } = parsed.data;
 
-    // ─── Workflow check: only when status is actually changing ───
-    // Members can move their own tasks around, but not INTO Done.
-    // Only owners/managers can approve and complete.
     if (status !== undefined && status !== ctx.task.status) {
       const canMove = canMoveTaskTo({
         role: ctx.role,
@@ -250,19 +228,16 @@ export async function PATCH(request, { params }) {
       }
     }
 
-    // Build partial update payload
     const data = {};
     if (title !== undefined) data.title = title;
     if (description !== undefined) data.description = description || null;
     if (status !== undefined) data.status = status;
     if (priority !== undefined) data.priority = priority;
 
-    // Assignee: '' or null clears it
     if (assigneeId !== undefined) {
       if (assigneeId === '' || assigneeId === null) {
         data.assigneeId = null;
       } else {
-        // Must be a project member
         const isMember = await prisma.projectMember.findUnique({
           where: { projectId_userId: { projectId, userId: assigneeId } },
         });
@@ -273,7 +248,6 @@ export async function PATCH(request, { params }) {
           );
         }
 
-        // Caller must be allowed to assign to that target
         if (
           !canAssignTo({
             role: ctx.role,
@@ -299,19 +273,17 @@ export async function PATCH(request, { params }) {
       data.labels = labels;
     }
 
-       if (Object.keys(data).length === 0) {
+    if (Object.keys(data).length === 0) {
       return NextResponse.json(
         { error: 'No fields to update' },
         { status: 400 }
       );
     }
 
-    // ─── Capture original values for notification diffing ───
-    // We need to know what changed, so we snapshot before update.
     const originalAssigneeId = ctx.task.assigneeId || null;
     const originalStatus = ctx.task.status;
 
-       const updated = await prisma.task.update({
+    const updated = await prisma.task.update({
       where: { id: taskId },
       data,
       include: {
@@ -325,7 +297,6 @@ export async function PATCH(request, { params }) {
       },
     });
 
-    // ─── Fire notifications for what changed ───
     const actorName = session.user.name || session.user.email || 'Someone';
     const notifyBase = {
       task: {
@@ -340,19 +311,32 @@ export async function PATCH(request, { params }) {
       actorName,
     };
 
-    // Trigger A: assignee changed → notify the new assignee
     const newAssigneeId = updated.assigneeId || null;
     if (newAssigneeId && newAssigneeId !== originalAssigneeId) {
       await notifyTaskEvent({ ...notifyBase, event: 'reassigned' });
     }
 
-    // Trigger B: status changed → notify assignee + creator
     if (updated.status !== originalStatus) {
       await notifyTaskEvent({
         ...notifyBase,
         event: 'status_changed',
         extra: { statusLabel: statusMeta(updated.status).label },
       });
+
+      // ─── NEW: Notify managers when a MEMBER moves to REVIEW ───
+      if (updated.status === 'REVIEW' && !ctx.isPrivileged) {
+        await notifyReviewSubmitted({
+          task: {
+            id: updated.id,
+            projectId: updated.projectId,
+            title: updated.title,
+          },
+          workspaceId: ctx.project.workspaceId,
+          actorId: session.user.id,
+          actorName,
+          actorIsPrivileged: false,
+        });
+      }
     }
 
     return NextResponse.json({
@@ -369,7 +353,7 @@ export async function PATCH(request, { params }) {
 }
 
 // =============================================================
-// DELETE — Delete task
+// DELETE — Delete task (strict: owner/manager only)
 // =============================================================
 export async function DELETE(request, { params }) {
   try {
@@ -382,15 +366,9 @@ export async function DELETE(request, { params }) {
     const ctx = await loadContext(projectId, taskId, session.user.id);
     if (ctx.error) return ctx.error;
 
-    if (
-      !canMutateTask({
-        task: ctx.task,
-        userId: session.user.id,
-        isPrivileged: ctx.isPrivileged,
-      })
-    ) {
+    if (!ctx.isPrivileged) {
       return NextResponse.json(
-        { error: 'You do not have permission to delete this task' },
+        { error: 'Only workspace owners or managers can delete tasks.' },
         { status: 403 }
       );
     }

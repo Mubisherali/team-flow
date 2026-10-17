@@ -214,6 +214,7 @@ const ProjectTasksSection = ({
         task={detailTask}
         projectMembers={projectMembers}
         canEdit={canEditTask(detailTask)}
+        canDelete={isPrivileged} 
         currentUserId={currentUserId}
         currentUserRole={workspaceRole}
         onUpdated={() => {}}

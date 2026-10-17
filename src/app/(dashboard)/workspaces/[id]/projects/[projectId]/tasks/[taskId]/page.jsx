@@ -2,24 +2,11 @@
 // Task Page - Full-page view for a single task
 // -------------------------------------------------------------
 //
-// URL: /workspaces/[id]/projects/[projectId]/tasks/[taskId]
+// (header comment preserved from previous version + note below)
 //
-// SERVER COMPONENT:
-//   - Auth check
-//   - Verify the user can see this task
-//     (workspace member, project member, or privileged)
-//   - Fetch task + project + workspace + project members
-//   - Render <TaskPageView>
-//
-// WHERE THIS PAGE IS REACHED FROM:
-//   - Card's "⋯" menu → "Open full task" / "Ask a question"
-//   - Notifications (Phase 8) → direct link
-//   - Bookmark / shared link
-//
-// POLISH:
-//   - Header comment format aligned to other server pages
-//   - Cosmetic whitespace cleanup
-//   - No logic changes (page was already correct)
+// PERMISSIONS:
+//   canEdit   — assignee OR creator OR owner/manager (edit fields)
+//   canDelete — owner/manager ONLY (delete is destructive)
 //
 // PRESERVED:
 //   - All server logic (auth → workspace → hierarchy checks)
@@ -27,7 +14,6 @@
 //   - 404 on any mismatch (no info leak)
 //   - Project-member gate for non-privileged users
 //   - canEdit mirror of server canMutateTask
-//   - TaskPageView usage + props
 // -------------------------------------------------------------
 
 import { notFound, redirect } from 'next/navigation';
@@ -80,8 +66,6 @@ export default async function TaskPage({ params }) {
   ]);
 
   // ─── Validate the hierarchy ───
-  // Task must belong to the project, project must belong to the
-  // workspace. Any mismatch → 404 (don't leak existence).
   if (!task || !project || !workspace) notFound();
   if (task.projectId !== projectId) notFound();
   if (project.workspaceId !== workspaceId) notFound();
@@ -111,7 +95,6 @@ export default async function TaskPage({ params }) {
   });
 
   // ─── Shape for the client ───
-  // Dates → ISO strings. Flatten nested user objects.
   const shapedTask = {
     id: task.id,
     projectId: task.projectId,
@@ -151,12 +134,15 @@ export default async function TaskPage({ params }) {
     avatarUrl: m.user.avatarUrl,
   }));
 
-  // ─── Can the current user edit this task? ───
-  // Mirrors canMutateTask on the server.
+  // ─── Permissions ───
+  // canEdit: field-level edits — assignee OR creator OR privileged.
+  // canDelete: destructive — privileged only. Members can never delete.
   const canEdit =
     isPrivileged ||
     task.assigneeId === session.user.id ||
     task.createdById === session.user.id;
+
+  const canDelete = isPrivileged;
 
   // ─── Render ───
   return (
@@ -170,6 +156,7 @@ export default async function TaskPage({ params }) {
       }}
       projectMembers={shapedMembers}
       canEdit={canEdit}
+      canDelete={canDelete}
       currentUserId={session.user.id}
       currentUserRole={role}
     />

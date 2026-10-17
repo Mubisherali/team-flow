@@ -7,26 +7,30 @@
 //   (only when tasks exist).
 //
 // STRUCTURE:
-//   Row: "Filter:" label · assignee select · priority select ·
+//   Row: "Filter:" label · assignee Select · priority Select ·
 //        Clear button (if active) · count (if active)
 //
 // POLISH:
-//   - Selects get soft indigo focus ring (matches form inputs)
-//   - Clear button gets active:scale + focus ring
-//   - Count uses tabular-nums
-//   - Type scale aligned to Wave-3
-//   - A11y: aria-labels on selects, aria-hidden on icon
+//   - Uses <Select> component (glass dropdown, keyboard nav,
+//     color dots, dark mode compatible)
+//   - All native <select> elements removed
+//   - Priority options show colored dots
+//   - Assignee options flattened (no optgroup)
 //
 // PRESERVED:
 //   - Same props (filters, onFiltersChange, projectMembers,
 //     currentUserId, totalCount, visibleCount)
 //   - Same filter shape
 //   - Stateless (filters live in parent)
-//   - Same optgroup separation (members excluding "me")
+//   - Same optgroup separation → now flattened:
+//       "All assignees" → "Assigned to me" → project members
 // -------------------------------------------------------------
 
 'use client';
 
+import { useMemo } from 'react';
+
+import Select from '@/components/ui/Select';
 import { TASK_PRIORITIES } from '@/lib/task-constants';
 
 const TaskFilterBar = ({
@@ -49,16 +53,36 @@ const TaskFilterBar = ({
     onFiltersChange({ assignee: 'all', priority: 'ALL' });
   };
 
-  const selectClasses = `
-    text-[12px] px-2.5 py-1.5 rounded-lg
-    bg-white dark:bg-white/[0.03]
-    text-gray-700 dark:text-gray-300
-    border border-gray-200 dark:border-white/[0.08]
-    focus:outline-none
-    focus:ring-2 focus:ring-indigo-500/20
-    focus:border-indigo-500 dark:focus:border-indigo-500/60
-    transition-all duration-150
-  `;
+  // ─── Assignee options ───
+  // Flattened: "All assignees" → "Assigned to me" → members
+  // (excluding current user — they already appear as "me").
+  const assigneeOptions = useMemo(() => {
+    const others = (projectMembers || []).filter(
+      (m) => m.userId !== currentUserId
+    );
+
+    return [
+      { value: 'all', label: 'All assignees' },
+      { value: 'me', label: 'Assigned to me' },
+      ...others.map((m) => ({
+        value: m.userId,
+        label: m.name || m.email,
+      })),
+    ];
+  }, [projectMembers, currentUserId]);
+
+  // ─── Priority options ───
+  const priorityOptions = useMemo(
+    () => [
+      { value: 'ALL', label: 'All priorities' },
+      ...TASK_PRIORITIES.map((p) => ({
+        value: p.value,
+        label: p.label,
+        dot: p.dot,
+      })),
+    ],
+    []
+  );
 
   return (
     <div className="flex flex-wrap items-center gap-2.5 py-3">
@@ -68,41 +92,26 @@ const TaskFilterBar = ({
       </span>
 
       {/* Assignee */}
-      <select
-        value={filters.assignee}
-        onChange={(e) => update({ assignee: e.target.value })}
-        aria-label="Filter by assignee"
-        className={selectClasses}
-      >
-        <option value="all">All assignees</option>
-        <option value="me">Assigned to me</option>
-        {projectMembers.length > 0 && (
-          <optgroup label="Project members">
-            {projectMembers
-              .filter((m) => m.userId !== currentUserId)
-              .map((m) => (
-                <option key={m.userId} value={m.userId}>
-                  {m.name || m.email}
-                </option>
-              ))}
-          </optgroup>
-        )}
-      </select>
+      <div className="w-[160px]">
+        <Select
+          value={filters.assignee}
+          options={assigneeOptions}
+          onChange={(v) => update({ assignee: v })}
+          size="sm"
+          menuAlign="left"
+        />
+      </div>
 
       {/* Priority */}
-      <select
-        value={filters.priority}
-        onChange={(e) => update({ priority: e.target.value })}
-        aria-label="Filter by priority"
-        className={selectClasses}
-      >
-        <option value="ALL">All priorities</option>
-        {TASK_PRIORITIES.map((p) => (
-          <option key={p.value} value={p.value}>
-            {p.label}
-          </option>
-        ))}
-      </select>
+      <div className="w-[140px]">
+        <Select
+          value={filters.priority}
+          options={priorityOptions}
+          onChange={(v) => update({ priority: v })}
+          size="sm"
+          menuAlign="left"
+        />
+      </div>
 
       {/* Clear button — only when filters are active */}
       {hasActiveFilters && (

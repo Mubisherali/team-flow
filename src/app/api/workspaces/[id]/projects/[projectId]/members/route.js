@@ -13,6 +13,11 @@
 // INVARIANT:
 //   Only workspace members can be added to a project. A user
 //   cannot be a project member without being in the workspace.
+//
+// NOTIFICATIONS (POST only):
+//   On successful add, the added user gets an
+//   INVITATION-style project notification so their bell lights
+//   up. Fire-and-forget — never breaks the add operation.
 // -------------------------------------------------------------
 
 import { NextResponse } from 'next/server';
@@ -26,6 +31,7 @@ import {
   canManageProjectMembers,
 } from '@/lib/permissions';
 import { addProjectMemberSchema } from '@/lib/validators/project';
+import { notifyProjectEvent } from '@/lib/notifications';
 
 // =============================================================
 // GET — List project members
@@ -148,10 +154,18 @@ export async function POST(request, { params }) {
 
     const { userId } = parsed.data;
 
-    // Confirm project belongs to this workspace
+    // Confirm project belongs to this workspace.
+    // Also fetch name + workspace name for the notification message.
     const project = await prisma.project.findUnique({
       where: { id: projectId },
-      select: { id: true, workspaceId: true },
+      select: {
+        id: true,
+        name: true,
+        workspaceId: true,
+        workspace: {
+          select: { id: true, name: true },
+        },
+      },
     });
 
     if (!project || project.workspaceId !== workspaceId) {
@@ -215,6 +229,25 @@ export async function POST(request, { params }) {
         },
       },
     });
+
+    // ─── Notify the added user (fire-and-forget) ───
+    // Wrapped in try/catch so a notification failure never
+    // breaks the add operation.
+    try {
+      const actorName =
+        session.user.name || session.user.email || 'Someone';
+
+      await notifyProjectEvent({
+        event: 'member_added',
+        recipientId: userId,
+        actorId: session.user.id,
+        actorName,
+        workspace: project.workspace,
+        project: { id: project.id, name: project.name },
+      });
+    } catch (notifyErr) {
+      console.error('[PROJECT_MEMBER_NOTIFY]', notifyErr);
+    }
 
     return NextResponse.json(
       {

@@ -43,6 +43,7 @@ enum NotificationType {
   INVITATION_RECEIVED  
   INVITATION_DECLINED   
   PROJECT_ADDED
+  TASK_MOVED_TO_REVIEW
 }
 
 model User {

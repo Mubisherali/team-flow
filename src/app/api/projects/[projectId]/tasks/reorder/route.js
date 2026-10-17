@@ -15,6 +15,13 @@
 // WHY THE DONE RESTRICTION:
 //   Managers approve work. A member marking their own task as
 //   DONE removes the review step. This enforces the workflow.
+//
+// NOTIFICATIONS:
+//   Fires the SAME notifications as the PATCH /tasks/[taskId]
+//   route so drag-and-drop and edit-mode stay in sync:
+//     - status_changed → assignee + creator (if status changed)
+//     - review_submitted → all managers (if moved to REVIEW
+//       by a MEMBER)
 // -------------------------------------------------------------
 
 import { NextResponse } from 'next/server';
@@ -29,6 +36,11 @@ import {
 } from '@/lib/permissions';
 import { reorderTaskSchema } from '@/lib/validators/task';
 import { computeReorder } from '@/lib/kanban';
+import { statusMeta } from '@/lib/task-constants';
+import {
+  notifyTaskEvent,
+  notifyReviewSubmitted,
+} from '@/lib/notifications';
 
 export async function PATCH(request, { params }) {
   try {
@@ -96,6 +108,7 @@ export async function PATCH(request, { params }) {
       select: {
         id: true,
         projectId: true,
+        title: true,
         status: true,
         assigneeId: true,
         createdById: true,
@@ -110,7 +123,6 @@ export async function PATCH(request, { params }) {
     }
 
     // ─── Workflow permission check ───
-    // Same rule as PATCH /tasks/[taskId] and the client-side check.
     if (
       !canMoveTaskTo({
         role,
@@ -119,7 +131,6 @@ export async function PATCH(request, { params }) {
         newStatus,
       })
     ) {
-      // Give a helpful, specific error.
       if (!isPrivileged && newStatus === 'DONE') {
         return NextResponse.json(
           {
@@ -134,6 +145,9 @@ export async function PATCH(request, { params }) {
         { status: 403 }
       );
     }
+
+    // ─── Capture pre-change state for diffing ───
+    const originalStatus = movingTask.status;
 
     // ─── Fetch all tasks in the project ───
     const allTasks = await prisma.task.findMany({
@@ -160,6 +174,51 @@ export async function PATCH(request, { params }) {
         })
       )
     );
+
+    // ─── Fire notifications (only when status actually changed) ───
+    // Reordering within the SAME column doesn't notify anyone.
+    // Only column changes trigger notifications.
+    if (newStatus !== originalStatus) {
+      const actorName =
+        session.user.name || session.user.email || 'Someone';
+
+      try {
+        // Base status-change notification (assignee + creator).
+        await notifyTaskEvent({
+          task: {
+            id: movingTask.id,
+            projectId: movingTask.projectId,
+            title: movingTask.title,
+            assigneeId: movingTask.assigneeId,
+            createdById: movingTask.createdById,
+          },
+          workspaceId: project.workspaceId,
+          actorId: session.user.id,
+          actorName,
+          event: 'status_changed',
+          extra: { statusLabel: statusMeta(newStatus).label },
+        });
+
+        // Extra: managers get a "submitted for review" ping
+        // when a MEMBER drags into Review.
+        if (newStatus === 'REVIEW' && !isPrivileged) {
+          await notifyReviewSubmitted({
+            task: {
+              id: movingTask.id,
+              projectId: movingTask.projectId,
+              title: movingTask.title,
+            },
+            workspaceId: project.workspaceId,
+            actorId: session.user.id,
+            actorName,
+            actorIsPrivileged: false,
+          });
+        }
+      } catch (notifyErr) {
+        // Never break the reorder if a notification fails.
+        console.error('[TASKS_REORDER_NOTIFY]', notifyErr);
+      }
+    }
 
     return NextResponse.json({
       message: 'Tasks reordered',

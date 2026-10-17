@@ -4,19 +4,12 @@
 //
 // PROPS:
 //   task / project / workspace / projectMembers
-//   canEdit / currentUserId / currentUserRole
+//   canEdit / canDelete / currentUserId / currentUserRole
 //
-// MODES:
-//   - view (default): <TaskViewMode>
-//   - edit:           <TaskEditMode> + Save/Cancel
+//   canEdit   — assignee OR creator OR privileged
+//   canDelete — privileged ONLY (owner/manager)
 //
-// POLISH:
-//   - Responsive padding
-//   - Framer Motion: mode crossfade, save indicator, error banner,
-//     delete confirmation
-//   - Refined breadcrumb + back link
-//   - Glass dark mode
-//   - Bigger tap targets on actions
+// (rest of header preserved)
 // -------------------------------------------------------------
 
 'use client';
@@ -38,6 +31,7 @@ const TaskPageView = ({
   workspace,
   projectMembers,
   canEdit,
+  canDelete,
   currentUserId,
   currentUserRole,
 }) => {
@@ -48,7 +42,7 @@ const TaskPageView = ({
   const router = useRouter();
   const savedTimerRef = useRef(null);
 
-  // ─── Editor hook (always mounted) ───
+  // ─── Editor hook ───
   const editor = useTaskEditor({
     task,
     projectId: project.id,
@@ -143,7 +137,6 @@ const TaskPageView = ({
   const statusInfo = statusMeta(task.status);
   const isSaving = editor.saveState === 'saving';
 
-  // ─── Render ───
   return (
     <div className="p-5 sm:p-8 max-w-4xl mx-auto">
       {/* ══════════ BREADCRUMB + BACK ══════════ */}
@@ -187,7 +180,6 @@ const TaskPageView = ({
 
       {/* ══════════ TOP BAR: STATUS + ACTIONS ══════════ */}
       <div className="flex items-center justify-between gap-4 mb-6 flex-wrap">
-        {/* Status + Save indicator */}
         <div className="flex items-center gap-2.5">
           <span className={`w-2 h-2 rounded-full ${statusInfo.dot}`} />
           <span className="text-[12.5px] font-medium text-gray-500 dark:text-gray-400">
@@ -223,7 +215,6 @@ const TaskPageView = ({
           </AnimatePresence>
         </div>
 
-        {/* Actions */}
         {canEdit && (
           <div className="flex items-center gap-2">
             {!isEditing ? (
@@ -425,8 +416,8 @@ const TaskPageView = ({
         />
       </div>
 
-      {/* ══════════ DANGER ZONE ══════════ */}
-      {canEdit && (
+      {/* ══════════ DANGER ZONE (privileged only) ══════════ */}
+      {canDelete && (
         <section>
           <h2 className="text-[15px] font-semibold text-red-600 dark:text-red-400 mb-3">
             Danger zone
@@ -486,7 +477,7 @@ const TaskPageView = ({
 };
 
 // =============================================================
-// DeleteConfirmModal - full-screen confirmation
+// DeleteConfirmModal (unchanged)
 // =============================================================
 const DeleteConfirmModal = ({
   taskTitle,

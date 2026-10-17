@@ -2,24 +2,12 @@
 // NotificationItem - Single row in the notification dropdown
 // -------------------------------------------------------------
 //
-// WHEN USED:
-//   Rendered by <NotificationDropdown> for each notification.
+// (header preserved)
 //
-// STRUCTURE:
-//   Unread dot · icon tile (by type) · message + relative time
-//
-// POLISH:
-//   - Icon tiles use glass tints (matches Wave-3 pattern)
-//   - Unread bg uses glass indigo
-//   - Type scale aligned to Wave-3
-//   - focus-visible ring on row
-//   - active:scale-[0.99]
-//   - aria-hidden on decorative SVGs
-//
-// PRESERVED:
-//   - Props (notification, onClick)
-//   - getIconForType() switch (all 6 types + default)
-//   - formatRelative helper (custom, per Wave-3 convention)
+// SUPPORTED TYPES:
+//   TASK_COMMENTED, TASK_STATUS_CHANGED, TASK_ASSIGNED,
+//   TASK_MOVED_TO_REVIEW, INVITATION_ACCEPTED, INVITATION_RECEIVED,
+//   INVITATION_DECLINED, PROJECT_ADDED
 // -------------------------------------------------------------
 
 'use client';
@@ -42,14 +30,12 @@ const NotificationItem = ({ notification, onClick }) => {
         ${!isRead ? 'bg-indigo-500/[0.04] dark:bg-indigo-500/[0.06]' : ''}
       `}
     >
-      {/* Unread dot */}
       <span className="w-2 pt-2.5 flex-shrink-0" aria-hidden="true">
         {!isRead && (
           <span className="block w-2 h-2 rounded-full bg-indigo-500" />
         )}
       </span>
 
-      {/* Icon */}
       <span
         className={`
           w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0
@@ -60,7 +46,6 @@ const NotificationItem = ({ notification, onClick }) => {
         {icon.svg}
       </span>
 
-      {/* Content */}
       <span className="flex-1 min-w-0">
         <span
           className={`
@@ -147,9 +132,32 @@ function getIconForType(type) {
         ),
       };
 
-    case 'INVITATION_ACCEPTED':
+    case 'TASK_MOVED_TO_REVIEW':
+      // Amber eye / review-check icon — signals "needs attention"
       return {
         bg: 'bg-amber-500/10 dark:bg-amber-500/15 text-amber-600 dark:text-amber-400',
+        svg: (
+          <svg
+            width="15"
+            height="15"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+          >
+            <path
+              d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <circle cx="12" cy="12" r="3" />
+          </svg>
+        ),
+      };
+
+    case 'INVITATION_ACCEPTED':
+      return {
+        bg: 'bg-emerald-500/10 dark:bg-emerald-500/15 text-emerald-600 dark:text-emerald-400',
         svg: (
           <svg
             width="15"
@@ -169,6 +177,46 @@ function getIconForType(type) {
               strokeLinecap="round"
               strokeLinejoin="round"
             />
+          </svg>
+        ),
+      };
+
+    case 'INVITATION_RECEIVED':
+      return {
+        bg: 'bg-amber-500/10 dark:bg-amber-500/15 text-amber-600 dark:text-amber-400',
+        svg: (
+          <svg
+            width="15"
+            height="15"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+          >
+            <rect x="2" y="4" width="20" height="16" rx="2" />
+            <path
+              d="M22 6l-10 7L2 6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        ),
+      };
+
+    case 'INVITATION_DECLINED':
+      return {
+        bg: 'bg-red-500/10 dark:bg-red-500/15 text-red-600 dark:text-red-400',
+        svg: (
+          <svg
+            width="15"
+            height="15"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+          >
+            <circle cx="12" cy="12" r="10" />
+            <path d="M15 9l-6 6M9 9l6 6" strokeLinecap="round" />
           </svg>
         ),
       };
@@ -215,7 +263,7 @@ function getIconForType(type) {
 }
 
 // =============================================================
-// formatRelative - custom helper (per project convention)
+// formatRelative
 // =============================================================
 function formatRelative(isoString) {
   const then = new Date(isoString).getTime();

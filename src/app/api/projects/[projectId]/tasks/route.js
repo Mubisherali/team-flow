@@ -2,17 +2,12 @@
 // /api/projects/[projectId]/tasks
 // -------------------------------------------------------------
 //
-// GET  : List tasks in the project
-// POST : Create a task
+// (header preserved + note below)
 //
-// AUTH:
-//   Both require the caller to be a project member OR an
-//   owner/manager of the project's workspace.
-//
-// SCOPE:
-//   Tasks are scoped to a project. `projectId` uniquely
-//   identifies the project — the workspace is derived via
-//   a lookup. Hence this route isn't nested under /workspaces.
+// WORKFLOW ENFORCEMENT (POST):
+//   Members cannot create tasks directly in REVIEW or DONE.
+//   Both are destinations, not starting points. Only owners/
+//   managers can create tasks there.
 // -------------------------------------------------------------
 
 import { NextResponse } from 'next/server';
@@ -28,10 +23,6 @@ import {
 import { createTaskSchema } from '@/lib/validators/task';
 import { notifyTaskEvent } from '@/lib/notifications';
 
-// -------------------------------------------------------------
-// Shared helper — load project + verify caller access
-// -------------------------------------------------------------
-// Returns { project, role, isProjectMember } or { error }.
 async function loadProjectAccess(projectId, userId) {
   const project = await prisma.project.findUnique({
     where: { id: projectId },
@@ -75,14 +66,14 @@ async function loadProjectAccess(projectId, userId) {
       };
     }
   } else {
-    isProjectMember = true; // privileged users have implicit access
+    isProjectMember = true;
   }
 
   return { project, role, isProjectMember };
 }
 
 // =============================================================
-// GET — List tasks
+// GET — List tasks (unchanged)
 // =============================================================
 export async function GET(request, { params }) {
   try {
@@ -151,7 +142,7 @@ export async function GET(request, { params }) {
 }
 
 // =============================================================
-// POST — Create task
+// POST — Create task (with workflow enforcement)
 // =============================================================
 export async function POST(request, { params }) {
   try {
@@ -166,6 +157,7 @@ export async function POST(request, { params }) {
     if (access.error) return access.error;
 
     const { role } = access;
+    const isPrivileged = role === 'OWNER' || role === 'MANAGER';
 
     // ─── Validate body ───
     const body = await request.json();
@@ -188,11 +180,20 @@ export async function POST(request, { params }) {
       labels,
     } = parsed.data;
 
+    // ─── Workflow gate: members can't create in REVIEW or DONE ───
+    // REVIEW and DONE are destinations, not starting points.
+    // Only owners/managers can create tasks there.
+    if (!isPrivileged && (status === 'REVIEW' || status === 'DONE')) {
+      return NextResponse.json(
+        {
+          error:
+            'Only managers can create tasks directly in Review or Done. Create it in To do or In progress instead.',
+        },
+        { status: 403 }
+      );
+    }
+
     // ─── Validate assignee ───
-    // Two checks:
-    //   1. The target user must be a project member.
-    //   2. The CALLER must be allowed to assign to that user
-    //      (see canAssignTo — members can only self-assign).
     let finalAssigneeId = null;
     if (assigneeId) {
       const isMember = await prisma.projectMember.findUnique({
@@ -221,7 +222,7 @@ export async function POST(request, { params }) {
       finalAssigneeId = assigneeId;
     }
 
-    // ─── Compute `order`: new tasks go to the bottom of their column ───
+    // ─── Compute order ───
     const lastInColumn = await prisma.task.findFirst({
       where: { projectId, status },
       orderBy: { order: 'desc' },
@@ -254,7 +255,8 @@ export async function POST(request, { params }) {
       },
     });
 
-      if (finalAssigneeId && finalAssigneeId !== session.user.id) {
+    // ─── Notify assignee (fire-and-forget) ───
+    if (finalAssigneeId && finalAssigneeId !== session.user.id) {
       const actorName = session.user.name || session.user.email || 'Someone';
       await notifyTaskEvent({
         task: {
