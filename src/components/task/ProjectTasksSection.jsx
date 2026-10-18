@@ -6,35 +6,14 @@
 //   Rendered by the project detail page. Owns filter state,
 //   create-task modal, and detail-task modal.
 //
-// STRUCTURE:
-//   Section (aria-labelledby="tasks-heading")
-//     - Header (title + count + New task button)
-//     - TaskFilterBar (only when tasks exist)
-//     - Board / EmptyTasks / NoMatches
-//   CreateTaskModal
-//   TaskDetailModal
-//
-// POLISH:
-//   - Header typography matches Wave-3 (baseline-aligned count)
-//   - Empty + NoMatches cards match EmptyMembers pattern
-//   - Primary buttons get active:scale + focus rings
-//   - A11y: section landmark, aria-labelledby, aria-hidden
-//
-// PRESERVED:
-//   - Same props
-//   - Same state (filters, createModal, detailTaskId)
-//   - Same handlers (handleOpenTask, handleOpenCreate,
-//     handleCloseCreate, handleTaskDeleted, handleOpenFull,
-//     handleAskQuestion)
-//   - Same filterTasks call + useMemo
-//   - Same canEditTask logic
-//   - Same KanbanBoard / modal usages
+// PHASE 11 (Global Search):
+//   Listens for ?new=true to auto-open the Create Task modal.
 // -------------------------------------------------------------
 
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation'; // <-- ADDED
 
 import KanbanBoard from './KanbanBoard';
 import CreateTaskModal from './CreateTaskModal';
@@ -50,18 +29,34 @@ const ProjectTasksSection = ({
   currentUserId,
   workspaceRole,
 }) => {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
   const [filters, setFilters] = useState({
     assignee: 'all',
     priority: 'ALL',
   });
 
+  // ─── Check URL for ?new=true ───
+  const shouldOpenCreate = searchParams.get('new') === 'true';
+  
   const [createModal, setCreateModal] = useState({
-    isOpen: false,
+    isOpen: shouldOpenCreate,
     defaultStatus: 'TODO',
   });
   const [detailTaskId, setDetailTaskId] = useState(null);
 
-  const router = useRouter();
+  useEffect(() => {
+  const handleOpen = () => setCreateModal({ isOpen: true, defaultStatus: 'TODO' });
+  window.addEventListener('open-create-task', handleOpen);
+  return () => window.removeEventListener('open-create-task', handleOpen);
+}, []);
+  // ─── Clean the URL after opening ───
+  useEffect(() => {
+    if (shouldOpenCreate) {
+      router.replace(`/workspaces/${workspaceId}/projects/${projectId}`, { scroll: false });
+    }
+  }, [shouldOpenCreate, router, workspaceId, projectId]);
 
   // Filtered tasks
   const visibleTasks = useMemo(

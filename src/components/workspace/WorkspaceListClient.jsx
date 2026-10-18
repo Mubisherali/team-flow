@@ -2,29 +2,15 @@
 // WorkspaceListClient - Grid of workspaces + create modal
 // -------------------------------------------------------------
 //
-// WHY A CLIENT WRAPPER:
-//   The page (server) fetches data. This component handles:
-//     - Modal open/close state
-//     - After-create refresh (via router.refresh)
-//     - Interactive cards
-//
-// POLISH:
-//   - Framer Motion stagger on cards
-//   - Card hover lift
-//   - Refined brand tiles, role badges, stats
-//   - Better empty state
-//
-// PROPS:
-//   initialWorkspaces : array of { id, name, slug, description,
-//                        role, memberCount, projectCount,
-//                        createdAt }
+// PHASE 11 (Global Search):
+//   Listens for ?new=true to auto-open the Create Workspace modal.
 // -------------------------------------------------------------
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation'; // <-- ADDED
 import { motion } from 'framer-motion';
 
 import CreateWorkspaceModal from './CreateWorkspaceModal';
@@ -55,8 +41,20 @@ const cardVariants = {
 // MAIN
 // -------------------------------------------------------------
 const WorkspaceListClient = ({ initialWorkspaces }) => {
-  const [isModalOpen, setIsModalOpen] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams(); // <-- ADDED
+
+  // ─── Check URL for ?new=true ───
+  const shouldOpenCreate = searchParams.get('new') === 'true';
+  
+  const [isModalOpen, setIsModalOpen] = useState(shouldOpenCreate);
+
+  // ─── Clean the URL after opening ───
+  useEffect(() => {
+    if (shouldOpenCreate) {
+      router.replace('/workspaces', { scroll: false });
+    }
+  }, [shouldOpenCreate, router]);
 
   const handleCreated = () => {
     setIsModalOpen(false);

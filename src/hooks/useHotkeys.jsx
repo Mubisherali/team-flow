@@ -6,11 +6,6 @@
 //   useHotkeys({
 //     onOpenSearch: () => setOpen(true)
 //   })
-//
-// BEHAVIOR:
-//   - Listens for Cmd+K (Mac) or Ctrl+K (Windows)
-//   - Ignores the shortcut if the user is typing inside an
-//     input, textarea, or contentEditable element.
 // -------------------------------------------------------------
 
 'use client';
@@ -22,9 +17,8 @@ export function useHotkeys({ onOpenSearch }) {
     const handleKeyDown = (e) => {
       // Check for Cmd+K or Ctrl+K
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault(); // Stop browser default (like focusing URL bar)
         
-        // Ignore if user is typing in an input or textarea
+        // Ignore if the user is typing in an input or textarea
         const target = e.target;
         const isTyping =
           target.tagName === 'INPUT' ||
@@ -32,6 +26,7 @@ export function useHotkeys({ onOpenSearch }) {
           target.isContentEditable;
 
         if (!isTyping) {
+          e.preventDefault(); // Stop the browser from focusing the URL bar
           onOpenSearch?.();
         }
       }

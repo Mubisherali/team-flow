@@ -2,16 +2,10 @@
 // Dashboard Layout
 // -------------------------------------------------------------
 //
-// SERVER COMPONENT:
-//   - Reads session
-//   - Fetches workspaces (for the sidebar)
-//   - Renders <DashboardShell> (client) with the fetched data
-//
-// WHY THE SPLIT:
-//   Server needs to be async + access DB + session. But the
-//   responsive drawer needs client-side state. So this file
-//   stays a server component and delegates rendering to a
-//   client shell.
+// PHASE 11 (Onboarding):
+//   - Checks if the user has 0 workspaces.
+//   - If so, renders the <OnboardingWizard /> full-screen
+//     instead of the normal dashboard shell.
 // -------------------------------------------------------------
 
 import { redirect } from 'next/navigation';
@@ -20,6 +14,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import DashboardShell from '@/components/layout/DashboardShell';
+import OnboardingWizard from '@/components/onboarding/OnboardingWizard';
 
 export default async function DashboardLayout({ children }) {
   const session = await getServerSession(authOptions);
@@ -27,12 +22,15 @@ export default async function DashboardLayout({ children }) {
     redirect('/login');
   }
 
+  // ─── Fetch user's workspaces ───
   const memberships = await prisma.workspaceMember.findMany({
     where: { userId: session.user.id },
     include: {
-      workspace: { select: { id: true, name: true, slug: true } },
+      workspace: {
+        select: { id: true, name: true, slug: true },
+      },
     },
-    orderBy: { joinedAt: 'desc' },
+    orderBy: { joinedAt: 'asc' },
   });
 
   const workspaces = memberships.map((m) => ({
@@ -42,15 +40,15 @@ export default async function DashboardLayout({ children }) {
     role: m.role,
   }));
 
-  const user = {
-    id: session.user.id,
-    name: session.user.name,
-    email: session.user.email,
-    image: session.user.image,
-  };
+  // ─── Onboarding Flow ───
+  // If the user has no workspaces, show the wizard.
+  if (workspaces.length === 0) {
+    return <OnboardingWizard user={session.user} />;
+  }
 
+  // ─── Normal Dashboard ───
   return (
-    <DashboardShell user={user} workspaces={workspaces}>
+    <DashboardShell user={session.user} workspaces={workspaces}>
       {children}
     </DashboardShell>
   );

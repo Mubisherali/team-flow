@@ -2,31 +2,14 @@
 // Sidebar - Left navigation for the dashboard
 // -------------------------------------------------------------
 //
-// STRUCTURE (top to bottom):
-//   1. Brand row (logo + name) + close button (mobile)
-//   2. Workspace switcher (dropdown)
-//   3. Dashboard link (flat)
-//   4. Active modules (context-aware, from useSidebarModules)
-//   5. Notification bell (DESKTOP ONLY — mobile uses top bar)
-//   6. User menu (both)
-//
-// RESPONSIVE:
-//   - On mobile, this component is rendered INSIDE a drawer
-//     (see SidebarDrawer.jsx). It receives `onClose` to close
-//     the drawer when the X is tapped.
-//   - On desktop, `onClose` is undefined; the close button
-//     is not rendered.
-//   - The bell is hidden on mobile (uses MobileTopbar's bell).
-//
-// PROPS:
-//   user       : { id, name, email, image }
-//   workspaces : [{ id, name, slug, role }]
-//   onClose    : optional — closes the mobile drawer
+// PHASE 11 (Fix):
+//   - Remembers the last active workspace when navigating
+//     to global pages like /my-tasks or /invitations.
 // -------------------------------------------------------------
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter, useParams } from 'next/navigation';
 import { signOut } from 'next-auth/react';
@@ -46,18 +29,40 @@ const Sidebar = ({ user, workspaces = [], onClose }) => {
   const router = useRouter();
   const params = useParams() || {};
 
-  const workspaceId = params?.id;
+  // ─── 1. Track the active workspace context ───
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState(null);
+
+  useEffect(() => {
+    const urlWorkspaceId = params?.id;
+    
+    if (urlWorkspaceId) {
+      // We are in a workspace. Save it as the last active.
+      setActiveWorkspaceId(urlWorkspaceId);
+      localStorage.setItem('lastActiveWorkspaceId', urlWorkspaceId);
+    } else {
+      // We are on a global page (like /my-tasks). Load the last active.
+      const saved = localStorage.getItem('lastActiveWorkspaceId');
+      // Only use it if the user is still a member of it
+      if (saved && safeWorkspaces.some(w => w.id === saved)) {
+        setActiveWorkspaceId(saved);
+      } else if (safeWorkspaces.length > 0) {
+        // Fallback to their first workspace if the saved one is gone
+        setActiveWorkspaceId(safeWorkspaces[0].id);
+      }
+    }
+  }, [params?.id, safeWorkspaces]);
+
   const projectId = params?.projectId;
   const taskId = params?.taskId;
 
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
   // ─── Fetch stats for the current context ───
-  const stats = useSidebarStats({ workspaceId, projectId });
+  const stats = useSidebarStats({ workspaceId: activeWorkspaceId, projectId });
 
   // ─── Compute modules from context ───
   const modules = useSidebarModules({
-    workspaceId,
+    workspaceId: activeWorkspaceId,
     projectId,
     taskId,
     stats,
@@ -84,7 +89,7 @@ const Sidebar = ({ user, workspaces = [], onClose }) => {
   // ─── Dashboard link active state ───
   const isOnDashboard =
     pathname === '/workspaces' ||
-    (workspaceId && !projectId && !taskId && pathname === `/workspaces/${workspaceId}`);
+    (activeWorkspaceId && !projectId && !taskId && pathname === `/workspaces/${activeWorkspaceId}`);
 
   return (
     <aside
@@ -245,9 +250,48 @@ const Sidebar = ({ user, workspaces = [], onClose }) => {
         )}
       </nav>
 
+      {/* ─── SHORTCUTS HINT ─── */}
+      <div className="hidden lg:block px-3 pt-2">
+        <button
+          onClick={() => window.dispatchEvent(new CustomEvent('open-shortcuts'))}
+          className="
+            w-full flex items-center justify-between gap-2
+            px-2.5 py-2 rounded-xl
+            text-[12px] font-medium
+            text-gray-500 dark:text-gray-400
+            hover:bg-gray-100 dark:hover:bg-white/[0.04]
+            hover:text-gray-900 dark:hover:text-white
+            transition-all duration-150
+            group
+          "
+        >
+          <span className="flex items-center gap-2">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              className="text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-300 transition-colors"
+            >
+              <rect x="2" y="4" width="20" height="16" rx="2" />
+              <path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M6 12h.01M10 12h.01M14 12h.01M18 12h.01M8 16h8" strokeLinecap="round" />
+            </svg>
+            Shortcuts
+          </span>
+          <kbd className="
+            px-1.5 py-0.5 rounded bg-gray-100 dark:bg-white/[0.06] 
+            border border-gray-200 dark:border-white/[0.08]
+            text-[10px] text-gray-400
+          ">
+            ?
+          </kbd>
+        </button>
+      </div>
+
       {/* ─── NOTIFICATION BELL (desktop only) ─── */}
-      {/* On mobile the bell lives in MobileTopbar. */}
-      <div className="hidden lg:block px-3 pt-2 pb-1 border-t border-gray-200 dark:border-white/[0.06]">
+      <div className="hidden lg:block px-3 pt-1 pb-1">
         <NotificationBell />
       </div>
 

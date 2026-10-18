@@ -29,8 +29,7 @@ export async function GET(request) {
       return NextResponse.json({ tasks: [], projects: [], workspaces: [] });
     }
 
-    // Prisma's "insensitive" mode is PostgreSQL-only. If you are
-    // using SQLite locally, remove `mode: 'insensitive'`.
+    // Prisma's "insensitive" mode is PostgreSQL-only.
     const searchFilter = {
       contains: query,
       mode: 'insensitive',
@@ -47,7 +46,6 @@ export async function GET(request) {
     });
 
     // ─── 2. Search Projects ───
-    // We only show projects the user has access to.
     const projects = await prisma.project.findMany({
       where: {
         name: searchFilter,
@@ -65,7 +63,6 @@ export async function GET(request) {
     });
 
     // ─── 3. Search Tasks ───
-    // Tasks the user is assigned to, created, or can see as an admin.
     const tasks = await prisma.task.findMany({
       where: {
         title: searchFilter,

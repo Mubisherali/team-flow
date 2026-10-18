@@ -2,55 +2,80 @@
 // DashboardShell - Client wrapper for the dashboard layout
 // -------------------------------------------------------------
 //
-// (header preserved + note below)
-//
-// NEW (Phase 11):
-//   - Integrated CommandPalette (Cmd+K)
-//   - Global hotkey listener for search
+// PHASE 11 (Shortcuts):
+//   - Integrated global keyboard shortcuts (G+W, C, N, ?)
+//   - Integrated Shortcuts cheat sheet modal
 // -------------------------------------------------------------
 
 'use client';
 
-import { useState } from 'react';
-import { useParams } from 'next/navigation'; // <-- ADDED
+import { useState, useEffect } from 'react';
+import { useParams } from 'next/navigation';
 
 import Sidebar from './Sidebar';
 import MobileTopbar from './MobileTopbar';
 import SidebarDrawer from './SidebarDrawer';
 import NotificationToaster from './NotificationToaster';
 import NotificationSound from './NotificationSound';
-import CommandPalette from './CommandPalette'; // <-- ADDED
+import CommandPalette from './CommandPalette';
+import ShortcutsModal from './ShortcutsModal'; // <-- ADDED
 import { NotificationsProvider } from '@/context/NotificationsContext';
 import { useIsMobile } from '@/hooks/useMediaQuery';
-import { useHotkeys } from '@/hooks/useHotkeys'; // <-- ADDED
+import { useHotkeys } from '@/hooks/useHotkeys';
+import { useAppShortcuts } from '@/hooks/useAppShortcuts'; // <-- ADDED
 import { Toaster } from 'react-hot-toast';
 
 const DashboardShell = ({ user, workspaces, children }) => {
   const isMobile = useIsMobile();
-  const params = useParams() || {}; // <-- ADDED
+  const params = useParams() || {};
 
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false); // <-- ADDED
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false); // <-- ADDED
 
   const openDrawer = () => setDrawerOpen(true);
   const closeDrawer = () => setDrawerOpen(false);
+
+  // Context
+  const workspaceId = params?.id;
+  const projectId = params?.projectId;
+  const isInsideProject = !!projectId;
 
   // ─── Global Cmd+K listener ───
   useHotkeys({
     onOpenSearch: () => setSearchOpen(true),
   });
 
-  // ─── Extract context from URL for smart actions ───
-  const workspaceId = params?.id;
-  const projectId = params?.projectId;
+  // ─── Global App Shortcuts (G+W, C, N, ?) ───
+  useAppShortcuts({
+    workspaceId,
+    isInsideProject,
+    // If inside a project, 'C' triggers Create Task
+    onCreateTask: () => {
+      // We dispatch a custom event that ProjectTasksSection listens to
+      window.dispatchEvent(new CustomEvent('open-create-task'));
+    },
+    // If inside a workspace, 'N' triggers Create Project
+    onCreateProject: () => {
+      // We dispatch a custom event that ProjectsSection listens to
+      window.dispatchEvent(new CustomEvent('open-create-project'));
+    },
+  });
+
+  // ─── Listen for '?' to open Cheat Sheet ───
+  useEffect(() => {
+    const handleOpenShortcuts = () => setShortcutsOpen(true);
+    window.addEventListener('open-shortcuts', handleOpenShortcuts);
+    return () => window.removeEventListener('open-shortcuts', handleOpenShortcuts);
+  }, []);
 
   return (
     <NotificationsProvider>
       <div className="min-h-screen flex flex-col lg:flex-row bg-gray-50 dark:bg-gray-950">
-        {/* ─── Mobile top bar ─── */}
+        {/* Mobile top bar */}
         <MobileTopbar user={user} onOpenSidebar={openDrawer} />
 
-        {/* ─── Sidebar / Drawer ─── */}
+        {/* Sidebar / Drawer */}
         <SidebarDrawer
           isOpen={drawerOpen}
           onClose={closeDrawer}
@@ -63,10 +88,10 @@ const DashboardShell = ({ user, workspaces, children }) => {
           />
         </SidebarDrawer>
 
-        {/* ─── Main content ─── */}
+        {/* Main content */}
         <main className="flex-1 min-w-0">{children}</main>
 
-        {/* ─── Global Search Command Palette ─── */}
+        {/* Global Overlays */}
         <CommandPalette
           open={searchOpen}
           setOpen={setSearchOpen}
@@ -74,7 +99,12 @@ const DashboardShell = ({ user, workspaces, children }) => {
           projectId={projectId}
         />
 
-        {/* ─── Toast portal ─── */}
+        <ShortcutsModal
+          isOpen={shortcutsOpen}
+          onClose={() => setShortcutsOpen(false)}
+        />
+
+        {/* Toast portal */}
         <Toaster
           position="top-center"
           containerStyle={{ top: 20 }}
@@ -89,7 +119,7 @@ const DashboardShell = ({ user, workspaces, children }) => {
           }}
         />
 
-        {/* ─── Notification effects ─── */}
+        {/* Notification effects */}
         <NotificationToaster />
         <NotificationSound />
       </div>

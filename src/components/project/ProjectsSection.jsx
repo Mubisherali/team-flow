@@ -6,39 +6,40 @@
 //   Rendered by the workspace detail page. Owns modal state
 //   and the "create project" trigger.
 //
-// STRUCTURE:
-//   Header (title + count + New project button)
-//     - Grid (ProjectCard × N + dashed "create" card)
-//     OR
-//     - Empty state (EmptyProjects)
-//   CreateProjectModal (always rendered when canCreate)
-//
-// POLISH:
-//   - Header typography matches Wave-3 scale
-//   - Dashed "create" card gets glass + indigo hover + motion
-//   - Empty state matches EmptyMembers/EmptyComments pattern
-//   - Primary buttons get active:scale + focus rings
-//   - A11y: section landmark, aria-labelledby, aria-hidden
-//
-// PRESERVED:
-//   - Same props (workspaceId, initialProjects, canCreate)
-//   - router.refresh() after creation (server is source of truth)
-//   - All three render branches (has-projects / empty / modal)
+// PHASE 11 (Global Search):
+//   Listens for ?new=true to auto-open the Create Project modal.
 // -------------------------------------------------------------
 
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 
-import CreateProjectModal from './CreateProjectModal';
-import ProjectCard from './ProjectCard';
+import CreateProjectModal from "./CreateProjectModal";
+import ProjectCard from "./ProjectCard";
 
 const ProjectsSection = ({ workspaceId, initialProjects, canCreate }) => {
-  const [isModalOpen, setIsModalOpen] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // ─── Check URL for ?new=true ───
+  const shouldOpenCreate = searchParams.get("new") === "true";
+
+  const [isModalOpen, setIsModalOpen] = useState(shouldOpenCreate);
 
   const hasProjects = initialProjects.length > 0;
+
+  useEffect(() => {
+  const handleOpen = () => setIsModalOpen(true);
+  window.addEventListener('open-create-project', handleOpen);
+  return () => window.removeEventListener('open-create-project', handleOpen);
+}, []);
+  // ─── Clean the URL after opening ───
+  useEffect(() => {
+    if (shouldOpenCreate) {
+      router.replace(`/workspaces/${workspaceId}`, { scroll: false });
+    }
+  }, [shouldOpenCreate, router, workspaceId]);
 
   const handleCreated = () => {
     // The modal already redirects to the new project.
@@ -225,8 +226,8 @@ const EmptyProjects = ({ canCreate, onCreateClick }) => (
     </h3>
     <p className="text-[12.5px] text-gray-500 dark:text-gray-400 mb-6 text-center max-w-sm leading-relaxed">
       {canCreate
-        ? 'A project is where tasks live. Create one to get started.'
-        : 'No projects yet. Ask a workspace owner or manager to create one.'}
+        ? "A project is where tasks live. Create one to get started."
+        : "No projects yet. Ask a workspace owner or manager to create one."}
     </p>
 
     {canCreate && (
