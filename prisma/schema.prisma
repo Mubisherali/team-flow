@@ -161,6 +161,7 @@ model Task {
   order       Int          @default(0)
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
+  completedAt DateTime?
 
   project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
   assignee  User?      @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
@@ -171,6 +172,7 @@ model Task {
   @@index([assigneeId])
   @@index([status])
   @@map("tasks")
+  @@index([completedAt])  // ← ADD THIS (inside Task model)
 }
 
 model Comment {

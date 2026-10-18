@@ -2,12 +2,20 @@
 // /api/projects/[projectId]/tasks/[taskId]
 // -------------------------------------------------------------
 //
-// (header preserved + note below)
+// GET    : Fetch one task
+// PATCH  : Update a task
+// DELETE : Delete a task
 //
-// REVIEW NOTIFICATION:
-//   When a MEMBER moves a task to REVIEW, all owners/managers
-//   in the workspace get a TASK_MOVED_TO_REVIEW notification.
-//   Managers acting on their own don't trigger this.
+// AUTH:
+//   GET    — any project member / workspace owner / manager
+//   PATCH  — owner/manager OR (member who is the assignee
+//            or the creator of the task) — "canMutateTask"
+//   DELETE — owner/manager ONLY (strict role gate)
+//
+// COMPLETED AT:
+//   When status changes to DONE, we set `completedAt = now()`.
+//   When status changes AWAY from DONE, we clear it back to null.
+//   This powers the velocity and burndown charts.
 // -------------------------------------------------------------
 
 import { NextResponse } from 'next/server';
@@ -130,6 +138,7 @@ function shapeTask(task) {
     order: task.order,
     createdAt: task.createdAt,
     updatedAt: task.updatedAt,
+    completedAt: task.completedAt, // ✅ Added
   };
 }
 
@@ -158,7 +167,7 @@ export async function GET(request, { params }) {
 }
 
 // =============================================================
-// PATCH — Update task (with review notification)
+// PATCH — Update task (with completedAt logic)
 // =============================================================
 export async function PATCH(request, { params }) {
   try {
@@ -231,8 +240,21 @@ export async function PATCH(request, { params }) {
     const data = {};
     if (title !== undefined) data.title = title;
     if (description !== undefined) data.description = description || null;
-    if (status !== undefined) data.status = status;
     if (priority !== undefined) data.priority = priority;
+
+    // ─── Status + completedAt logic ───
+    if (status !== undefined) {
+      data.status = status;
+      
+      // If moving TO Done, set completedAt
+      if (status === 'DONE') {
+        data.completedAt = new Date();
+      } 
+      // If moving AWAY from Done, clear completedAt
+      else if (ctx.task.status === 'DONE') {
+        data.completedAt = null;
+      }
+    }
 
     if (assigneeId !== undefined) {
       if (assigneeId === '' || assigneeId === null) {
@@ -323,7 +345,7 @@ export async function PATCH(request, { params }) {
         extra: { statusLabel: statusMeta(updated.status).label },
       });
 
-      // ─── NEW: Notify managers when a MEMBER moves to REVIEW ───
+      // ─── Notify managers when a MEMBER moves to REVIEW ───
       if (updated.status === 'REVIEW' && !ctx.isPrivileged) {
         await notifyReviewSubmitted({
           task: {

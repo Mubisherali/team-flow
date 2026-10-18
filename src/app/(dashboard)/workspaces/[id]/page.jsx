@@ -7,48 +7,31 @@
 // SERVER COMPONENT:
 //   - Fetches workspace + user role + stats server-side
 //   - Fetches visible projects for the current user
-//   - Renders header, stats, projects grid, team section
-//
-// PROJECT VISIBILITY:
-//   - OWNER/MANAGER → see ALL projects in the workspace
-//   - MEMBER        → see only projects they belong to
-//
-// POLISH:
-//   - Card surface matches TaskDetailModal (dark #0f1115)
-//   - Glass indigo accents on stat cards
-//   - Workspace avatar keeps gradient + inner ring (C)
-//   - Tighter type scale (Wave-3)
-//   - Buttons/links get active:scale + focus rings
-//   - A11y: section landmarks, aria-labelledby, aria-hidden
-//
-// PRESERVED:
-//   - All server logic (auth, role, prisma queries)
-//   - Project visibility filter (privileged vs. member)
-//   - shapedProjects serialization
-//   - Sub-components (StatCard, RoleBadge)
-//   - ProjectsSection usage
+//   - Fetches 14-day task data for the new Analytics
+//   - Renders header, stats, projects, team, AND analytics (at bottom)
 // -------------------------------------------------------------
 
-import { notFound, redirect } from 'next/navigation';
-import Link from 'next/link';
-import { getServerSession } from 'next-auth';
+import { notFound, redirect } from "next/navigation";
+import Link from "next/link";
+import { getServerSession } from "next-auth";
 
-import { authOptions } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { authOptions } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 import {
   getMemberRole,
   canViewWorkspace,
   canEditWorkspace,
   canCreateProjects,
-} from '@/lib/permissions';
-import ProjectsSection from '@/components/project/ProjectsSection';
-import { DEFAULT_PROJECT_COLOR } from '@/lib/project-colors';
+} from "@/lib/permissions";
+import ProjectsSection from "@/components/project/ProjectsSection";
+import AnalyticsSection from "@/components/analytics/AnalyticsSection";
+import { DEFAULT_PROJECT_COLOR } from "@/lib/project-colors";
 
 export default async function WorkspaceDetailPage({ params }) {
   // ─── Step 1: Auth check ───
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
-    redirect('/login');
+    redirect("/login");
   }
 
   const { id } = await params;
@@ -63,52 +46,27 @@ export default async function WorkspaceDetailPage({ params }) {
   const workspace = await prisma.workspace.findUnique({
     where: { id },
     include: {
-      _count: {
-        select: {
-          members: true,
-          projects: true,
-        },
-      },
+      _count: { select: { members: true, projects: true } },
     },
   });
 
-  if (!workspace) {
-    notFound();
-  }
+  if (!workspace) notFound();
 
-  // ─── Step 4: Count tasks across all projects ───
-  const taskCount = await prisma.task.count({
-    where: {
-      project: { workspaceId: id },
-    },
-  });
-
-  // ─── Step 5: Fetch visible projects ───
-  // Same filter as GET /api/workspaces/[id]/projects
-  const isPrivileged = role === 'OWNER' || role === 'MANAGER';
-
+  // ─── Step 4: Fetch visible projects ───
+  const isPrivileged = role === "OWNER" || role === "MANAGER";
   const projectWhere = isPrivileged
     ? { workspaceId: id }
-    : {
-        workspaceId: id,
-        members: { some: { userId: session.user.id } },
-      };
+    : { workspaceId: id, members: { some: { userId: session.user.id } } };
 
   const projects = await prisma.project.findMany({
     where: projectWhere,
     include: {
-      _count: {
-        select: { members: true, tasks: true },
-      },
-      members: {
-        where: { userId: session.user.id },
-        select: { id: true },
-      },
+      _count: { select: { members: true, tasks: true } },
+      members: { where: { userId: session.user.id }, select: { id: true } },
     },
-    orderBy: { createdAt: 'desc' },
+    orderBy: { createdAt: "desc" },
   });
 
-  // Shape for the client (serialize dates → strings)
   const shapedProjects = projects.map((p) => ({
     id: p.id,
     name: p.name,
@@ -121,6 +79,25 @@ export default async function WorkspaceDetailPage({ params }) {
     updatedAt: p.updatedAt.toISOString(),
   }));
 
+  // ─── Step 5: Fetch Analytics Data ───
+  const visibleProjectIds = projects.map((p) => p.id);
+
+  const analyticsTasks = visibleProjectIds.length
+    ? await prisma.task.findMany({
+        where: { projectId: { in: visibleProjectIds } },
+        select: {
+          id: true,
+          status: true,
+          priority: true,
+          dueDate: true,
+          completedAt: true,
+          assignee: { select: { id: true, name: true, email: true } },
+        },
+      })
+    : [];
+
+  const analytics = buildAdvancedAnalytics(analyticsTasks);
+
   // ─── Step 6: Permissions ───
   const canEdit = canEditWorkspace(role);
   const canCreate = canCreateProjects(role);
@@ -131,7 +108,6 @@ export default async function WorkspaceDetailPage({ params }) {
       {/* ══════════ HEADER ══════════ */}
       <header className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-8">
         <div className="flex items-start gap-4 min-w-0">
-          {/* Workspace avatar (gradient + inner ring) */}
           <div
             className="
               w-14 h-14 rounded-2xl flex-shrink-0
@@ -249,7 +225,7 @@ export default async function WorkspaceDetailPage({ params }) {
         />
         <StatCard
           label="Tasks"
-          value={taskCount}
+          value={analytics.totalTasks}
           icon={
             <svg
               width="16"
@@ -285,7 +261,7 @@ export default async function WorkspaceDetailPage({ params }) {
       </section>
 
       {/* ══════════ TEAM ══════════ */}
-      <section aria-labelledby="team-heading">
+      <section aria-labelledby="team-heading" className="mb-10">
         <div className="flex items-center justify-between gap-3 mb-4">
           <h2
             id="team-heading"
@@ -295,36 +271,21 @@ export default async function WorkspaceDetailPage({ params }) {
           </h2>
           <Link
             href={`/workspaces/${id}/members`}
-            className="
-              text-[13px] font-medium
-              text-indigo-600 hover:text-indigo-700
-              dark:text-indigo-400 dark:hover:text-indigo-300
-              focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40
-              rounded
-              transition-colors duration-150
-            "
+            className="text-[13px] font-medium text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 transition-colors"
           >
             View all →
           </Link>
         </div>
 
-        <div
-          className="
-            rounded-2xl p-5 sm:p-6
-            border border-gray-200 dark:border-white/[0.08]
-            bg-white dark:bg-[#0f1115]
-          "
-        >
+        <div className="rounded-2xl p-5 sm:p-6 border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-[#0f1115]">
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div className="min-w-0">
               <p className="text-[13px] text-gray-600 dark:text-gray-400">
                 <strong className="text-gray-900 dark:text-white font-semibold">
                   {workspace._count.members}
-                </strong>{' '}
-                {workspace._count.members === 1
-                  ? 'member'
-                  : 'members'}{' '}
-                in this workspace
+                </strong>{" "}
+                {workspace._count.members === 1 ? "member" : "members"} in this
+                workspace
               </p>
               <p className="text-[11.5px] text-gray-500 dark:text-gray-400 mt-1">
                 Invite teammates to collaborate on projects and tasks.
@@ -333,15 +294,7 @@ export default async function WorkspaceDetailPage({ params }) {
 
             <Link
               href={`/workspaces/${id}/members`}
-              className="
-                inline-flex items-center gap-1.5 flex-shrink-0
-                px-3.5 py-2 rounded-lg
-                bg-indigo-600 hover:bg-indigo-700
-                active:scale-[0.98]
-                focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40
-                text-white text-[13px] font-medium
-                transition-all duration-150
-              "
+              className="inline-flex items-center gap-1.5 flex-shrink-0 px-3.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] text-white text-[13px] font-medium transition-all duration-150"
             >
               <svg
                 width="14"
@@ -359,30 +312,134 @@ export default async function WorkspaceDetailPage({ params }) {
           </div>
         </div>
       </section>
+
+      {/* ══════════ ANALYTICS (MOVED TO BOTTOM) ══════════ */}
+      <div className="border-t border-gray-200 dark:border-white/[0.06] pt-10">
+        <AnalyticsSection analytics={analytics} title="Workspace Analytics" />
+      </div>
     </div>
   );
 }
 
 // =============================================================
-// StatCard
+// Helper: Advanced Analytics
+// =============================================================
+function buildAdvancedAnalytics(tasks) {
+  const byStatus = { TODO: 0, IN_PROGRESS: 0, REVIEW: 0, DONE: 0 };
+  const byPriority = { LOW: 0, MEDIUM: 0, HIGH: 0, URGENT: 0 };
+  const memberMap = new Map();
+  const priorityMixMap = {
+    "To do": { URGENT: 0, HIGH: 0, MEDIUM: 0, LOW: 0 },
+    "In progress": { URGENT: 0, HIGH: 0, MEDIUM: 0, LOW: 0 },
+    Review: { URGENT: 0, HIGH: 0, MEDIUM: 0, LOW: 0 },
+    Done: { URGENT: 0, HIGH: 0, MEDIUM: 0, LOW: 0 },
+  };
+  const dueHealth = { overdue: 0, dueSoon: 0, onTrack: 0, noDate: 0 };
+  const now = new Date();
+  const twoDaysFromNow = new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000);
+  const velocityMap = new Map();
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  for (let i = 13; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    velocityMap.set(d.toISOString().split("T")[0], 0);
+  }
+
+  for (const t of tasks) {
+    if (byStatus[t.status] !== undefined) byStatus[t.status]++;
+    if (byPriority[t.priority] !== undefined) byPriority[t.priority]++;
+
+    if (t.assignee) {
+      const e = memberMap.get(t.assignee.id) || {
+        name: (t.assignee.name || t.assignee.email).split(" ")[0],
+        TODO: 0,
+        IN_PROGRESS: 0,
+        REVIEW: 0,
+        DONE: 0,
+      };
+      e[t.status]++;
+      memberMap.set(t.assignee.id, e);
+    }
+
+    const sLabel = {
+      TODO: "To do",
+      IN_PROGRESS: "In progress",
+      REVIEW: "Review",
+      DONE: "Done",
+    }[t.status];
+    if (sLabel && priorityMixMap[sLabel]) priorityMixMap[sLabel][t.priority]++;
+
+    if (t.status !== "DONE") {
+      if (!t.dueDate) dueHealth.noDate++;
+      else {
+        const due = new Date(t.dueDate);
+        if (due < now) dueHealth.overdue++;
+        else if (due <= twoDaysFromNow) dueHealth.dueSoon++;
+        else dueHealth.onTrack++;
+      }
+    }
+
+    if (t.status === "DONE" && t.completedAt) {
+      const cDate = new Date(t.completedAt);
+      cDate.setHours(0, 0, 0, 0);
+      const dStr = cDate.toISOString().split("T")[0];
+      if (velocityMap.has(dStr))
+        velocityMap.set(dStr, velocityMap.get(dStr) + 1);
+    }
+  }
+
+  const velocityData = Array.from(velocityMap.entries()).map(
+    ([dStr, count]) => {
+      const d = new Date(dStr);
+      return {
+        date: d.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+        completed: count,
+      };
+    },
+  );
+
+  const dueDateData = [
+    { name: "Overdue", value: dueHealth.overdue, color: "#ef4444" },
+    { name: "Due Soon", value: dueHealth.dueSoon, color: "#f59e0b" },
+    { name: "On Track", value: dueHealth.onTrack, color: "#10b981" },
+    { name: "No Date", value: dueHealth.noDate, color: "#9ca3af" },
+  ].filter((d) => d.value > 0);
+
+  const workloadData = Array.from(memberMap.values())
+    .sort(
+      (a, b) =>
+        b.TODO +
+        b.IN_PROGRESS +
+        b.REVIEW +
+        b.DONE -
+        (a.TODO + a.IN_PROGRESS + a.REVIEW + a.DONE),
+    )
+    .slice(0, 6);
+
+  const priorityMixData = Object.entries(priorityMixMap).map(
+    ([status, counts]) => ({ status, ...counts }),
+  );
+
+  return {
+    totalTasks: tasks.length,
+    byStatus,
+    byPriority,
+    workloadData,
+    priorityMixData,
+    velocityData,
+    dueDateData,
+  };
+}
+
+// =============================================================
+// Sub-components
 // =============================================================
 const StatCard = ({ label, value, icon }) => (
-  <div
-    className="
-      rounded-2xl p-5
-      border border-gray-200 dark:border-white/[0.08]
-      bg-white dark:bg-[#0f1115]
-    "
-  >
+  <div className="rounded-2xl p-5 border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-[#0f1115]">
     <div className="flex items-center gap-3">
-      <div
-        className="
-          w-9 h-9 rounded-lg flex-shrink-0
-          bg-indigo-500/10 dark:bg-indigo-500/15
-          text-indigo-600 dark:text-indigo-400
-          flex items-center justify-center
-        "
-      >
+      <div className="w-9 h-9 rounded-lg flex-shrink-0 bg-indigo-500/10 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
         {icon}
       </div>
       <div className="min-w-0">
@@ -397,23 +454,18 @@ const StatCard = ({ label, value, icon }) => (
   </div>
 );
 
-// =============================================================
-// RoleBadge (matches MembersListClient)
-// =============================================================
 const RoleBadge = ({ role }) => {
   const styles = {
     OWNER:
-      'bg-amber-500/10 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300',
+      "bg-amber-500/10 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300",
     MANAGER:
-      'bg-blue-500/10 dark:bg-blue-500/15 text-blue-700 dark:text-blue-300',
+      "bg-blue-500/10 dark:bg-blue-500/15 text-blue-700 dark:text-blue-300",
     MEMBER:
-      'bg-gray-500/10 dark:bg-white/[0.06] text-gray-600 dark:text-gray-400',
+      "bg-gray-500/10 dark:bg-white/[0.06] text-gray-600 dark:text-gray-400",
   };
   return (
     <span
-      className={`text-[10px] font-semibold px-2 py-0.5 rounded uppercase tracking-wide flex-shrink-0 ${
-        styles[role] || styles.MEMBER
-      }`}
+      className={`text-[10px] font-semibold px-2 py-0.5 rounded uppercase tracking-wide flex-shrink-0 ${styles[role] || styles.MEMBER}`}
     >
       {role}
     </span>

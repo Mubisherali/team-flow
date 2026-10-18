@@ -2,32 +2,12 @@
 // useSidebarModules - Compute sidebar modules by context
 // -------------------------------------------------------------
 //
-// INPUT:
-//   { workspaceId, projectId, taskId, stats }
-//     - workspaceId/projectId/taskId : from URL params
-//     - stats : counts for subtext
-//         { projectCount, openTasks, doneTasks, memberCount,
-//           pendingInvitationCount }
-//
-// OUTPUT:
-//   Array of module definitions:
-//   [ { key, href, name, subtext, iconBg, icon, exact, badge? } ]
-//
-// BEHAVIOR:
-//   - An "Invitations" module is prepended when the user has
-//     any pending invitations (badge shows the count).
-//   - Otherwise, modules CHANGE based on context:
-//       - In a workspace  → Overview, Projects, Members, Settings
-//       - In a project    → Overview, Tasks, Members, Settings
-//       - In a task       → Task details, Discussion
-//       - Not in workspace → just Invitations (if any)
-//
-// ICONS:
-//   Defined inline as small SVGs. Kept here (not extracted)
-//   because they're sidebar-specific.
+// PHASE 11 (My Tasks):
+//   - Added "My Tasks" module to the top of the sidebar
+//     regardless of context.
 // -------------------------------------------------------------
 
-'use client';
+"use client";
 
 export function useSidebarModules({
   workspaceId,
@@ -37,6 +17,23 @@ export function useSidebarModules({
 }) {
   // ─── Icon library ───
   const ICONS = {
+    myTasks: (
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+      >
+        <path d="M9 11l3 3L22 4" strokeLinecap="round" strokeLinejoin="round" />
+        <path
+          d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    ),
     overview: (
       <svg
         width="14"
@@ -83,11 +80,7 @@ export function useSidebarModules({
         stroke="currentColor"
         strokeWidth="1.8"
       >
-        <path
-          d="M9 11l3 3 8-8"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
+        <path d="M9 11l3 3 8-8" strokeLinecap="round" strokeLinejoin="round" />
         <path
           d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"
           strokeLinecap="round"
@@ -179,39 +172,50 @@ export function useSidebarModules({
     ),
   };
 
-  // ─── Icon backgrounds (per module) ───
+  // ─── Icon backgrounds ───
   const BG = {
+    myTasks: "bg-rose-100 dark:bg-rose-500/15 text-rose-600 dark:text-rose-400",
     overview:
-      'bg-indigo-100 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400',
+      "bg-indigo-100 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400",
     projects:
-      'bg-violet-100 dark:bg-violet-500/15 text-violet-600 dark:text-violet-400',
+      "bg-violet-100 dark:bg-violet-500/15 text-violet-600 dark:text-violet-400",
     tasks:
-      'bg-emerald-100 dark:bg-emerald-500/15 text-emerald-600 dark:text-emerald-400',
-    members:
-      'bg-blue-100 dark:bg-blue-500/15 text-blue-600 dark:text-blue-400',
+      "bg-emerald-100 dark:bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
+    members: "bg-blue-100 dark:bg-blue-500/15 text-blue-600 dark:text-blue-400",
     settings:
-      'bg-gray-100 dark:bg-white/[0.06] text-gray-600 dark:text-gray-400',
-    task:
-      'bg-violet-100 dark:bg-violet-500/15 text-violet-600 dark:text-violet-400',
+      "bg-gray-100 dark:bg-white/[0.06] text-gray-600 dark:text-gray-400",
+    task: "bg-violet-100 dark:bg-violet-500/15 text-violet-600 dark:text-violet-400",
     comments:
-      'bg-cyan-100 dark:bg-cyan-500/15 text-cyan-600 dark:text-cyan-400',
+      "bg-cyan-100 dark:bg-cyan-500/15 text-cyan-600 dark:text-cyan-400",
     invitations:
-      'bg-amber-100 dark:bg-amber-500/15 text-amber-600 dark:text-amber-400',
+      "bg-amber-100 dark:bg-amber-500/15 text-amber-600 dark:text-amber-400",
   };
 
-  // ─── Invitations module (prepended when count > 0) ───
+  // ─── Global Modules (always shown at the top) ───
+  const myTasksModule = [
+    {
+      key: "my-tasks",
+      href: "/my-tasks",
+      exact: true,
+      name: "My Tasks",
+      subtext: "Your assigned work",
+      iconBg: BG.myTasks,
+      icon: ICONS.myTasks,
+    },
+  ];
+
   const inviteCount = stats.pendingInvitationCount || 0;
   const invitationModule =
     inviteCount > 0
       ? [
           {
-            key: 'invitations',
-            href: '/invitations',
+            key: "invitations",
+            href: "/invitations",
             exact: true,
-            name: 'Invitations',
+            name: "Invitations",
             subtext:
               inviteCount === 1
-                ? '1 pending invite'
+                ? "1 pending invite"
                 : `${inviteCount} pending invites`,
             iconBg: BG.invitations,
             icon: ICONS.invitations,
@@ -220,144 +224,139 @@ export function useSidebarModules({
         ]
       : [];
 
-  // ─── Build subtext from stats ───
+  const globalModules = [...myTasksModule, ...invitationModule];
+
+  // ─── Subtext helpers ───
   const projectsSubtext =
-    typeof stats.projectCount === 'number'
+    typeof stats.projectCount === "number"
       ? `${stats.projectCount} active`
       : null;
-
   const tasksSubtext = (() => {
     const open = stats.openTasks;
     const done = stats.doneTasks;
-    if (typeof open === 'number' && typeof done === 'number') {
+    if (typeof open === "number" && typeof done === "number")
       return `${open} open · ${done} done`;
-    }
-    if (typeof open === 'number') return `${open} open`;
+    if (typeof open === "number") return `${open} open`;
     return null;
   })();
-
   const membersSubtext =
-    typeof stats.memberCount === 'number'
-      ? `${stats.memberCount} ${
-          stats.memberCount === 1 ? 'teammate' : 'teammates'
-        }`
+    typeof stats.memberCount === "number"
+      ? `${stats.memberCount} ${stats.memberCount === 1 ? "teammate" : "teammates"}`
       : null;
 
-  // ─── No workspace → just show Invitations if any ───
+  // ─── Return logic ───
+
+  // 1. No workspace context
   if (!workspaceId) {
-    return invitationModule;
+    return globalModules;
   }
 
-  // ─── Context 1: Inside a task ───
+  // 2. Inside a task
   if (workspaceId && projectId && taskId) {
     return [
-      ...invitationModule,
+      ...globalModules,
       {
-        key: 'task',
+        key: "task",
         href: `/workspaces/${workspaceId}/projects/${projectId}/tasks/${taskId}`,
         exact: true,
-        name: 'Task details',
-        subtext: 'Overview and fields',
+        name: "Task details",
+        subtext: "Overview and fields",
         iconBg: BG.task,
         icon: ICONS.task,
       },
       {
-        key: 'comments',
+        key: "comments",
         href: `/workspaces/${workspaceId}/projects/${projectId}/tasks/${taskId}#comments`,
         exact: false,
-        name: 'Discussion',
-        subtext: 'Comments and replies',
+        name: "Discussion",
+        subtext: "Comments and replies",
         iconBg: BG.comments,
         icon: ICONS.comments,
       },
     ];
   }
 
-  // ─── Context 2: Inside a project ───
+  // 3. Inside a project
   if (workspaceId && projectId) {
     return [
-      ...invitationModule,
+      ...globalModules,
       {
-        key: 'overview',
+        key: "overview",
         href: `/workspaces/${workspaceId}/projects/${projectId}`,
         exact: true,
-        name: 'Overview',
-        subtext: 'Project dashboard',
+        name: "Overview",
+        subtext: "Project dashboard",
         iconBg: BG.overview,
         icon: ICONS.overview,
       },
       {
-        key: 'tasks',
+        key: "tasks",
         href: `/workspaces/${workspaceId}/projects/${projectId}#tasks`,
         exact: false,
-        name: 'Tasks',
+        name: "Tasks",
         subtext: tasksSubtext,
         iconBg: BG.tasks,
         icon: ICONS.tasks,
       },
       {
-        key: 'members',
+        key: "members",
         href: `/workspaces/${workspaceId}/projects/${projectId}#members`,
         exact: false,
-        name: 'Members',
+        name: "Members",
         subtext: membersSubtext,
         iconBg: BG.members,
         icon: ICONS.members,
       },
       {
-        key: 'settings',
+        key: "settings",
         href: `/workspaces/${workspaceId}/projects/${projectId}/settings`,
         exact: true,
-        name: 'Settings',
-        subtext: 'Project configuration',
+        name: "Settings",
+        subtext: "Project configuration",
         iconBg: BG.settings,
         icon: ICONS.settings,
       },
     ];
   }
 
-  // ─── Context 3: Inside a workspace ───
-  if (workspaceId) {
-    return [
-      ...invitationModule,
-      {
-        key: 'overview',
-        href: `/workspaces/${workspaceId}`,
-        exact: true,
-        name: 'Overview',
-        subtext: 'Workspace dashboard',
-        iconBg: BG.overview,
-        icon: ICONS.overview,
-      },
-      {
-        key: 'projects',
-        href: `/workspaces/${workspaceId}#projects`,
-        exact: false,
-        name: 'Projects',
-        subtext: projectsSubtext,
-        iconBg: BG.projects,
-        icon: ICONS.projects,
-      },
-      {
-        key: 'members',
-        href: `/workspaces/${workspaceId}/members`,
-        exact: true,
-        name: 'Members',
-        subtext: membersSubtext,
-        iconBg: BG.members,
-        icon: ICONS.members,
-      },
-      {
-        key: 'settings',
-        href: `/workspaces/${workspaceId}/settings`,
-        exact: true,
-        name: 'Settings',
-        subtext: 'Workspace configuration',
-        iconBg: BG.settings,
-        icon: ICONS.settings,
-      },
-    ];
-  }
-
-  return invitationModule;
+  // 4. Inside a workspace
+  return [
+    ...globalModules,
+    {
+      key: "overview",
+      href: `/workspaces/${workspaceId}`,
+      exact: true,
+      name: "Overview",
+      subtext: "Workspace dashboard",
+      iconBg: BG.overview,
+      icon: ICONS.overview,
+    },
+    {
+      key: "projects",
+      href: `/workspaces/${workspaceId}#projects`,
+      exact: false,
+      name: "Projects",
+      subtext: projectsSubtext,
+      iconBg: BG.projects,
+      icon: ICONS.projects,
+    },
+    {
+      key: "members",
+      href: `/workspaces/${workspaceId}/members`,
+      exact: true,
+      name: "Members",
+      subtext: membersSubtext,
+      iconBg: BG.members,
+      icon: ICONS.members,
+    },
+    {
+      key: "settings",
+      href: `/workspaces/${workspaceId}/settings`,
+      exact: true,
+      name: "Settings",
+      subtext: "Workspace configuration",
+      iconBg: BG.settings,
+      icon: ICONS.settings,
+    },
+  ];
 }

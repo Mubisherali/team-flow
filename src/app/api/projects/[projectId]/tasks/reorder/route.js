@@ -4,24 +4,9 @@
 //
 // PATCH: Bulk reorder tasks after a drag-and-drop.
 //
-// BODY:
-//   { taskId, newStatus, newIndex }
-//
-// PERMISSIONS:
-//   - OWNER/MANAGER  → can move any task to any column
-//   - ASSIGNEE/CREATOR → can move own tasks, BUT NOT to DONE
-//   - Everyone else  → blocked
-//
-// WHY THE DONE RESTRICTION:
-//   Managers approve work. A member marking their own task as
-//   DONE removes the review step. This enforces the workflow.
-//
-// NOTIFICATIONS:
-//   Fires the SAME notifications as the PATCH /tasks/[taskId]
-//   route so drag-and-drop and edit-mode stay in sync:
-//     - status_changed → assignee + creator (if status changed)
-//     - review_submitted → all managers (if moved to REVIEW
-//       by a MEMBER)
+// COMPLETED AT:
+//   If dragged to DONE, sets completedAt = now().
+//   If dragged out of DONE, clears completedAt to null.
 // -------------------------------------------------------------
 
 import { NextResponse } from 'next/server';
@@ -44,7 +29,6 @@ import {
 
 export async function PATCH(request, { params }) {
   try {
-    // ─── Auth ───
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -52,7 +36,6 @@ export async function PATCH(request, { params }) {
 
     const { projectId } = await params;
 
-    // ─── Project access ───
     const project = await prisma.project.findUnique({
       where: { id: projectId },
       select: { id: true, workspaceId: true },
@@ -75,7 +58,6 @@ export async function PATCH(request, { params }) {
 
     const isPrivileged = role === 'OWNER' || role === 'MANAGER';
 
-    // Non-privileged users must be a project member
     if (!isPrivileged) {
       const pm = await prisma.projectMember.findUnique({
         where: {
@@ -90,7 +72,6 @@ export async function PATCH(request, { params }) {
       }
     }
 
-    // ─── Validate body ───
     const body = await request.json();
     const parsed = reorderTaskSchema.safeParse(body);
     if (!parsed.success) {
@@ -102,7 +83,6 @@ export async function PATCH(request, { params }) {
 
     const { taskId, newStatus, newIndex } = parsed.data;
 
-    // ─── Confirm the task belongs to this project ───
     const movingTask = await prisma.task.findUnique({
       where: { id: taskId },
       select: {
@@ -122,7 +102,6 @@ export async function PATCH(request, { params }) {
       );
     }
 
-    // ─── Workflow permission check ───
     if (
       !canMoveTaskTo({
         role,
@@ -146,44 +125,49 @@ export async function PATCH(request, { params }) {
       );
     }
 
-    // ─── Capture pre-change state for diffing ───
     const originalStatus = movingTask.status;
 
-    // ─── Fetch all tasks in the project ───
     const allTasks = await prisma.task.findMany({
       where: { projectId },
       select: { id: true, status: true, order: true, createdAt: true },
     });
 
-    // ─── Compute the updates ───
     const updates = computeReorder(allTasks, taskId, newStatus, newIndex);
 
     if (updates.length === 0) {
       return NextResponse.json({ message: 'No changes' });
     }
 
-    // ─── Apply in a transaction ───
+    // ─── Apply in a transaction (now with completedAt) ───
     await prisma.$transaction(
-      updates.map((u) =>
-        prisma.task.update({
+      updates.map((u) => {
+        const data = { order: u.order };
+        
+        if (u.status) {
+          data.status = u.status;
+          
+          // Only the moving task needs completedAt logic
+          if (u.id === taskId) {
+            if (newStatus === 'DONE') {
+              data.completedAt = new Date();
+            } else if (originalStatus === 'DONE') {
+              data.completedAt = null;
+            }
+          }
+        }
+
+        return prisma.task.update({
           where: { id: u.id },
-          data: {
-            order: u.order,
-            ...(u.status ? { status: u.status } : {}),
-          },
-        })
-      )
+          data,
+        });
+      })
     );
 
-    // ─── Fire notifications (only when status actually changed) ───
-    // Reordering within the SAME column doesn't notify anyone.
-    // Only column changes trigger notifications.
     if (newStatus !== originalStatus) {
       const actorName =
         session.user.name || session.user.email || 'Someone';
 
       try {
-        // Base status-change notification (assignee + creator).
         await notifyTaskEvent({
           task: {
             id: movingTask.id,
@@ -199,8 +183,6 @@ export async function PATCH(request, { params }) {
           extra: { statusLabel: statusMeta(newStatus).label },
         });
 
-        // Extra: managers get a "submitted for review" ping
-        // when a MEMBER drags into Review.
         if (newStatus === 'REVIEW' && !isPrivileged) {
           await notifyReviewSubmitted({
             task: {
@@ -215,7 +197,6 @@ export async function PATCH(request, { params }) {
           });
         }
       } catch (notifyErr) {
-        // Never break the reorder if a notification fails.
         console.error('[TASKS_REORDER_NOTIFY]', notifyErr);
       }
     }

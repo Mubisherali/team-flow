@@ -1,23 +1,33 @@
 // -------------------------------------------------------------
-// useNotifications - Polling hook for notifications
+// useNotifications - Adaptive polling hook
 // -------------------------------------------------------------
 //
-// (Same as before, plus: tracking of newly-arrived notifications
-// so the toaster can fire toasts.)
+// POLLING STRATEGY (adaptive):
+//   - Active user (mouse/kbd/touch in last 30s) → poll every 5s
+//   - Idle user                                 → poll every 30s
+//   - Hidden tab                                → paused entirely
+//   - Tab regains focus                         → instant fetch
+//   - Tab becomes visible                       → instant fetch
+//
+// WHY ADAPTIVE:
+//   Users only notice notification delay when they're actively
+//   watching for one (after submitting for review, after asking
+//   a teammate to reply, etc.). If they're idle, we can save
+//   API calls. Feels instant when it matters, cheap when it
+//   doesn't.
 //
 // NEW EXPORT:
-//   latestArrival — the notification object that most recently
-//     arrived via polling (NOT from the initial fetch). Reset to
-//     null after the toaster consumes it via acknowledgeArrival().
-//   acknowledgeArrival — call after showing a toast so we don't
-//     fire it again.
+//   latestArrival / acknowledgeArrival — unchanged from before.
 // -------------------------------------------------------------
 
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 
-const POLL_INTERVAL_MS = 30_000;
+// ─── Polling intervals ───
+const ACTIVE_POLL_MS = 5_000;
+const IDLE_POLL_MS = 30_000;
+const IDLE_AFTER_MS = 30_000; // User is "active" for 30s after last input
 
 export function useNotifications() {
   const [notifications, setNotifications] = useState([]);
@@ -25,116 +35,187 @@ export function useNotifications() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  // Latest NEW arrival (only set after the first successful fetch).
   const [latestArrival, setLatestArrival] = useState(null);
 
   const timerRef = useRef(null);
   const mountedRef = useRef(true);
+  const inFlightRef = useRef(false);
 
-  // Track ids we've already seen. Used to detect what's new in
-  // each poll.
   const seenIdsRef = useRef(new Set());
   const hasInitializedRef = useRef(false);
+
+  // ─── Activity tracking ───
+  const lastActiveAtRef = useRef(Date.now());
+  const isActiveRef = useRef(true);
+  const currentPollMsRef = useRef(ACTIVE_POLL_MS);
 
   // -----------------------------------------------------------
   // FETCH
   // -----------------------------------------------------------
-  const refresh = useCallback(async ({ silent = false } = {}) => {
-    if (!silent) setLoading(true);
-    try {
-      const res = await fetch('/api/notifications', { cache: 'no-store' });
-      if (!mountedRef.current) return;
+  const refresh = useCallback(
+    async ({ silent = false } = {}) => {
+      // Skip if a fetch is already in-flight. Prevents hammering
+      // the API when activity events + timer tick overlap.
+      if (inFlightRef.current) return;
+      inFlightRef.current = true;
 
-      if (!res.ok) {
-        if (res.status === 401) {
-          setNotifications([]);
-          setUnreadCount(0);
-          setError('');
+      if (!silent) setLoading(true);
+      try {
+        const res = await fetch('/api/notifications', { cache: 'no-store' });
+        if (!mountedRef.current) return;
+
+        if (!res.ok) {
+          if (res.status === 401) {
+            setNotifications([]);
+            setUnreadCount(0);
+            setError('');
+          } else {
+            const data = await res.json().catch(() => ({}));
+            setError(data.error || 'Failed to load notifications');
+          }
+          return;
+        }
+
+        const data = await res.json();
+        if (!mountedRef.current) return;
+
+        const incoming = data.notifications || [];
+
+        // ─── Detect newly arrived notifications ───
+        if (!hasInitializedRef.current) {
+          hasInitializedRef.current = true;
+          incoming.forEach((n) => seenIdsRef.current.add(n.id));
         } else {
-          const data = await res.json().catch(() => ({}));
-          setError(data.error || 'Failed to load notifications');
+          const unseen = incoming.filter(
+            (n) => !seenIdsRef.current.has(n.id)
+          );
+
+          if (unseen.length > 0) {
+            unseen.forEach((n) => seenIdsRef.current.add(n.id));
+            setLatestArrival(unseen[0]);
+          }
         }
-        return;
+
+        setNotifications(incoming);
+        setUnreadCount(data.unreadCount || 0);
+        setError('');
+      } catch (err) {
+        if (!mountedRef.current) return;
+        console.error('[NOTIFICATIONS_FETCH]', err);
+        setError('Network error');
+      } finally {
+        inFlightRef.current = false;
+        if (mountedRef.current && !silent) setLoading(false);
       }
-
-      const data = await res.json();
-      if (!mountedRef.current) return;
-
-      const incoming = data.notifications || [];
-
-      // ─── Detect newly arrived notifications ───
-      // First fetch: seed the seen set, don't toast anything.
-      if (!hasInitializedRef.current) {
-        hasInitializedRef.current = true;
-        incoming.forEach((n) => seenIdsRef.current.add(n.id));
-      } else {
-        // Find the newest id that we haven't seen yet.
-        // incoming is newest-first, so the first unmatched is the arrival.
-        const unseen = incoming.filter((n) => !seenIdsRef.current.has(n.id));
-
-        if (unseen.length > 0) {
-          // Mark all as seen
-          unseen.forEach((n) => seenIdsRef.current.add(n.id));
-          // Report the newest one (first in the array)
-          setLatestArrival(unseen[0]);
-        }
-      }
-
-      setNotifications(incoming);
-      setUnreadCount(data.unreadCount || 0);
-      setError('');
-    } catch (err) {
-      if (!mountedRef.current) return;
-      console.error('[NOTIFICATIONS_FETCH]', err);
-      setError('Network error');
-    } finally {
-      if (mountedRef.current && !silent) setLoading(false);
-    }
-  }, []);
+    },
+    []
+  );
 
   // -----------------------------------------------------------
-  // ACKNOWLEDGE — call after firing a toast
+  // ACKNOWLEDGE
   // -----------------------------------------------------------
   const acknowledgeArrival = useCallback(() => {
     setLatestArrival(null);
   }, []);
 
   // -----------------------------------------------------------
-  // POLLING
+  // POLLING — adaptive
   // -----------------------------------------------------------
   useEffect(() => {
     mountedRef.current = true;
     refresh();
 
-    const startTimer = () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-      timerRef.current = setInterval(() => {
-        if (!document.hidden) refresh({ silent: true });
-      }, POLL_INTERVAL_MS);
+    // ─── Compute current desired interval based on activity ───
+    const computeInterval = () => {
+      const sinceActive = Date.now() - lastActiveAtRef.current;
+      return sinceActive < IDLE_AFTER_MS ? ACTIVE_POLL_MS : IDLE_POLL_MS;
     };
 
+    // ─── Timer management ───
     const stopTimer = () => {
       if (timerRef.current) {
-        clearInterval(timerRef.current);
+        clearTimeout(timerRef.current);
         timerRef.current = null;
       }
     };
 
-    const handleVisibility = () => {
-      if (document.hidden) stopTimer();
-      else {
-        refresh({ silent: true });
-        startTimer();
+    const scheduleNext = () => {
+      stopTimer();
+      if (document.hidden) return;
+
+      const delay = computeInterval();
+      currentPollMsRef.current = delay;
+
+      timerRef.current = setTimeout(() => {
+        if (!document.hidden) {
+          refresh({ silent: true });
+          scheduleNext();
+        }
+      }, delay);
+    };
+
+    // ─── Activity events ───
+    // Throttled to avoid re-computing on every mousemove. Only
+    // updates the ref — the actual interval change is picked up
+    // on the next scheduled tick.
+    const markActive = () => {
+      const wasIdle =
+        Date.now() - lastActiveAtRef.current >= IDLE_AFTER_MS;
+      lastActiveAtRef.current = Date.now();
+
+      // If we just went from idle → active, reschedule faster.
+      if (wasIdle && !document.hidden) {
+        isActiveRef.current = true;
+        scheduleNext();
       }
     };
 
-    startTimer();
-    document.addEventListener('visibilitychange', handleVisibility);
+    // ─── Visibility ───
+    const handleVisibility = () => {
+      if (document.hidden) {
+        stopTimer();
+      } else {
+        // Coming back to the tab → refresh immediately, then
+        // restart the timer at whatever pace is appropriate.
+        refresh({ silent: true });
+        scheduleNext();
+      }
+    };
 
+    // ─── Window focus ───
+    // Fires when the browser window regains focus (e.g. alt-tab).
+    const handleFocus = () => {
+      lastActiveAtRef.current = Date.now();
+      refresh({ silent: true });
+      scheduleNext();
+    };
+
+    // Attach listeners
+    const activityEvents = [
+      'mousemove',
+      'mousedown',
+      'keydown',
+      'touchstart',
+      'scroll',
+    ];
+
+    activityEvents.forEach((evt) =>
+      window.addEventListener(evt, markActive, { passive: true })
+    );
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('focus', handleFocus);
+
+    scheduleNext();
+
+    // ─── Cleanup ───
     return () => {
       mountedRef.current = false;
       stopTimer();
+      activityEvents.forEach((evt) =>
+        window.removeEventListener(evt, markActive)
+      );
       document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('focus', handleFocus);
     };
   }, [refresh]);
 
@@ -199,7 +280,6 @@ export function useNotifications() {
     markRead,
     markAllRead,
     refresh,
-    // NEW:
     latestArrival,
     acknowledgeArrival,
   };
