@@ -12,6 +12,8 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 
+import TeamFlowAssistant from '@/components/assistant/TeamFlowAssistant';
+
 import Sidebar from './Sidebar';
 import MobileTopbar from './MobileTopbar';
 import SidebarDrawer from './SidebarDrawer';
@@ -172,6 +174,15 @@ const DashboardShell = ({ user, workspaces, children }) => {
         </div>
 
         {/* Global Overlays */}
+        <CommandPalette
+          open={searchOpen}
+          setOpen={setSearchOpen}
+          workspaceId={workspaceId}
+          projectId={projectId}
+        />
+
+        <TeamFlowAssistant workspaceId={workspaceId} />
+
         <CommandPalette
           open={searchOpen}
           setOpen={setSearchOpen}

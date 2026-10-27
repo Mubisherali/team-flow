@@ -1,172 +1,154 @@
+
 // -------------------------------------------------------------
-// SettingsNav - Sub-navigation for the settings section
-// -------------------------------------------------------------
-//
-// WHEN USED:
-//   Rendered by settings/layout.jsx on the left side of the
-//   two-column settings shell.
-//
-// STRUCTURE:
-//   <nav> with items:
-//     - Profile       (live)
-//     - Appearance    (disabled — future)
-//     - Notifications (disabled — future)
-//
-// POLISH:
-//   - Active state uses glass indigo (matches Wave-3)
-//   - Links get active:scale + focus-visible ring
-//   - Disabled items get aria-disabled + title
-//   - Icon strokeWidth normalized to 1.8
-//   - A11y: aria-current="page" on active link, aria-hidden on icons
-//
-// PRESERVED:
-//   - Same NAV_ITEMS structure
-//   - Same usePathname() active logic
-//   - Same disabled visual pattern (muted, non-clickable)
-//   - Same responsive behavior (horizontal on mobile, vertical on desktop)
+// SettingsNav - Settings sub-navigation
 // -------------------------------------------------------------
 
-'use client';
+"use client";
 
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 const NAV_ITEMS = [
   {
-    href: '/settings/profile',
-    label: 'Profile',
+    href: "/settings/profile",
+    label: "Profile",
+    description: "Your personal information",
     icon: (
-      <svg
-        width="16"
-        height="16"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        aria-hidden="true"
-      >
-        <path
-          d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"
-          strokeLinecap="round"
-        />
-        <circle cx="12" cy="7" r="4" />
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none"
+        stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+        <circle cx="12" cy="8" r="4" />
+        <path d="M4 21v-2a8 8 0 0 1 16 0v2" strokeLinecap="round" />
       </svg>
     ),
     enabled: true,
   },
   {
-    href: '/settings/appearance',
-    label: 'Appearance',
+    href: "/settings/appearance",
+    label: "Appearance",
+    description: "Theme and display preferences",
     icon: (
-      <svg
-        width="16"
-        height="16"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        aria-hidden="true"
-      >
-        <circle cx="12" cy="12" r="5" />
-        <path
-          d="M12 1v2M12 21v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"
-          strokeLinecap="round"
-        />
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none"
+        stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 3v18m0-9h9" strokeLinecap="round" />
       </svg>
     ),
     enabled: false,
   },
   {
-    href: '/settings/notifications',
-    label: 'Notifications',
+    href: "/settings/notifications",
+    label: "Notifications",
+    description: "Manage your alerts",
     icon: (
-      <svg
-        width="16"
-        height="16"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        aria-hidden="true"
-      >
-        <path
-          d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"
-          strokeLinecap="round"
-        />
-        <path d="M13.73 21a2 2 0 01-3.46 0" strokeLinecap="round" />
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none"
+        stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+        <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M10 21h4" strokeLinecap="round" />
       </svg>
     ),
     enabled: false,
   },
 ];
 
-const SettingsNav = () => {
-  const pathname = usePathname() || '';
+export default function SettingsNav() {
+  const pathname = usePathname() || "";
 
   return (
     <nav
       aria-label="Settings sections"
-      className="
-        flex md:flex-col gap-1
-        overflow-x-auto md:overflow-x-visible
-        md:sticky md:top-8 md:self-start
-        -mx-1 px-1
-      "
+      className="min-w-0"
     >
-      {NAV_ITEMS.map((item) => {
-        const isActive = pathname === item.href;
+      <div className="mb-3 hidden px-3 md:block">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.17em] text-zinc-600">
+          Preferences
+        </p>
+      </div>
 
-        if (!item.enabled) {
-          return (
-            <span
-              key={item.href}
-              aria-disabled="true"
-              title="Coming soon"
-              className="
-                flex items-center gap-2 flex-shrink-0
-                px-3 py-2 rounded-lg
-                text-[13px]
-                text-gray-400 dark:text-gray-600
-                cursor-not-allowed whitespace-nowrap
-              "
-            >
-              <span className="flex-shrink-0 opacity-60" aria-hidden="true">
+      <div className="flex gap-1 overflow-x-auto pb-1 md:flex-col md:overflow-visible md:pb-0">
+        {NAV_ITEMS.map((item) => {
+          const isActive = pathname === item.href;
+
+          const itemClasses = `group relative flex shrink-0 items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40 ${
+            isActive
+              ? "border border-violet-400/15 bg-violet-500/[0.09] text-violet-200"
+              : item.enabled
+                ? "border border-transparent text-zinc-400 hover:bg-white/[0.035] hover:text-zinc-200"
+                : "border border-transparent text-zinc-600"
+          }`;
+
+          const content = (
+            <>
+              {isActive && (
+                <span className="absolute bottom-2 left-0 top-2 w-[2px] rounded-full bg-violet-400 md:block" aria-hidden="true" />
+              )}
+
+              <span
+                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition-colors ${
+                  isActive
+                    ? "border-violet-400/15 bg-violet-400/[0.1] text-violet-200"
+                    : "border-white/[0.055] bg-white/[0.025] text-zinc-500 group-hover:text-zinc-300"
+                }`}
+                aria-hidden="true"
+              >
                 {item.icon}
               </span>
-              {item.label}
-            </span>
-          );
-        }
 
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            aria-current={isActive ? 'page' : undefined}
-            className={`
-              flex items-center gap-2 flex-shrink-0
-              px-3 py-2 rounded-lg
-              text-[13px] font-medium
-              whitespace-nowrap
-              active:scale-[0.98]
-              focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40
-              transition-all duration-150
-              ${
-                isActive
-                  ? 'bg-indigo-500/10 dark:bg-indigo-500/15 text-indigo-700 dark:text-indigo-300'
-                  : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/[0.04]'
-              }
-            `}
-          >
-            <span className="flex-shrink-0" aria-hidden="true">
-              {item.icon}
-            </span>
-            {item.label}
-          </Link>
-        );
-      })}
+              <span className="min-w-0">
+                <span className="block whitespace-nowrap text-xs font-medium">
+                  {item.label}
+                </span>
+                <span className="mt-1 hidden whitespace-nowrap text-[10px] text-zinc-600 md:block">
+                  {item.description}
+                </span>
+              </span>
+
+              {!item.enabled && (
+                <span className="ml-auto hidden rounded-md border border-white/[0.06] px-1.5 py-0.5 text-[9px] text-zinc-600 md:inline-flex">
+                  Soon
+                </span>
+              )}
+            </>
+          );
+
+          if (!item.enabled) {
+            return (
+              <div
+                key={item.href}
+                aria-disabled="true"
+                title={`${item.label} — coming soon`}
+                className={`${itemClasses} cursor-not-allowed`}
+              >
+                {content}
+              </div>
+            );
+          }
+
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              aria-current={isActive ? "page" : undefined}
+              className={itemClasses}
+            >
+              {content}
+            </Link>
+          );
+        })}
+      </div>
+
+      <div className="mt-5 hidden rounded-xl border border-white/[0.055] bg-white/[0.015] p-3 md:block">
+        <div className="flex items-center gap-2">
+          <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-violet-500/10 text-[9px] font-bold text-violet-300">
+            TF
+          </span>
+          <span className="text-[10px] font-medium tracking-wide text-zinc-500">
+            TEAMFLOW SETTINGS
+          </span>
+        </div>
+        <p className="mt-2 text-[10px] leading-4 text-zinc-600">
+          Manage your account and personalize your workspace experience.
+        </p>
+      </div>
     </nav>
   );
-};
-
-export default SettingsNav;
+}

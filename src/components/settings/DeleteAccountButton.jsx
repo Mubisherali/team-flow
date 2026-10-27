@@ -1,403 +1,344 @@
+
 // -------------------------------------------------------------
 // DeleteAccountButton - Danger zone account deletion
 // -------------------------------------------------------------
-//
-// WHEN USED:
-//   Rendered inside the danger zone on the profile settings
-//   page.
-//
-// STRUCTURE:
-//   Trigger button (disabled when user owns workspaces)
-//     - Confirmation modal (AnimatePresence)
-//       - Header (warning icon + title)
-//       - Body (danger notice + email input + password input)
-//       - Footer (Cancel / Delete permanently)
-//
-// POLISH:
-//   - Modal matches DeleteWorkspaceButton exactly
-//   - Glass red surfaces
-//   - Body scroll lock while open
-//   - Esc closes (respects loading)
-//   - Inputs get soft red focus ring
-//   - Delete button gets spinner + active:scale + focus ring
-//   - A11y: role=dialog, aria-modal, aria-labelledby,
-//     aria-describedby, aria-invalid, role=alert
-//
-// PRESERVED:
-//   - Props (ownedWorkspaceCount, hasPassword)
-//   - State (isOpen, confirmEmail, password, loading, error)
-//   - canDelete guard (email match + password if hasPassword)
-//   - DELETE /api/users/me (with password body when applicable)
-//   - signOut() + redirect to /login
-// -------------------------------------------------------------
 
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { signOut, useSession } from 'next-auth/react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
+import { signOut, useSession } from "next-auth/react";
+import { motion, AnimatePresence } from "framer-motion";
 
-const DeleteAccountButton = ({ ownedWorkspaceCount, hasPassword }) => {
+export default function DeleteAccountButton({
+  ownedWorkspaceCount,
+  hasPassword,
+}) {
   const { data: session } = useSession();
-  const [isOpen, setIsOpen] = useState(false);
-  const [confirmEmail, setConfirmEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-
   const router = useRouter();
+  const dialogRef = useRef(null);
+  const emailInputRef = useRef(null);
 
-  const userEmail = session?.user?.email || '';
-  const isBlocked = ownedWorkspaceCount > 0;
+  const [isOpen, setIsOpen] = useState(false);
+  const [confirmEmail, setConfirmEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  // Email must match exactly (case-insensitive, trimmed)
+  const userEmail = session?.user?.email || "";
+  const isBlocked = Number(ownedWorkspaceCount) > 0;
+
   const emailMatches =
-    confirmEmail.trim().toLowerCase() === userEmail.toLowerCase();
+    confirmEmail.trim().toLowerCase() === userEmail.trim().toLowerCase();
 
-  // Password required only if user has one
   const passwordReady = !hasPassword || password.length > 0;
+  const canDelete =
+    !isBlocked && !!userEmail && emailMatches && passwordReady;
 
-  const canDelete = emailMatches && passwordReady;
+  const handleClose = () => {
+    if (loading) return;
 
-  // ─── Esc closes (respects loading) ───
+    setIsOpen(false);
+    setConfirmEmail("");
+    setPassword("");
+    setError("");
+  };
+
+  const handleOpen = () => {
+    if (isBlocked || loading) return;
+
+    setConfirmEmail("");
+    setPassword("");
+    setError("");
+    setIsOpen(true);
+  };
+
+  // Focus the email confirmation field after the dialog opens.
   useEffect(() => {
     if (!isOpen) return;
-    const onKey = (e) => {
-      if (e.key === 'Escape' && !loading) handleClose();
+
+    const frame = requestAnimationFrame(() => {
+      emailInputRef.current?.focus();
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [isOpen]);
+
+  // Escape handling.
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const onKeyDown = (event) => {
+      if (event.key === "Escape" && !loading) {
+        event.preventDefault();
+        handleClose();
+      }
+
+      if (event.key === "Tab" && dialogRef.current) {
+        const focusable = dialogRef.current.querySelectorAll(
+          'button:not(:disabled), input:not(:disabled), [href], [tabindex]:not([tabindex="-1"])',
+        );
+
+        const items = Array.from(focusable).filter(
+          (element) => element.offsetParent !== null,
+        );
+
+        if (!items.length) return;
+
+        const first = items[0];
+        const last = items[items.length - 1];
+
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
+      }
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
   }, [isOpen, loading]);
 
-  // ─── Body scroll lock ───
+  // Prevent background scrolling while the modal is open.
   useEffect(() => {
     if (!isOpen) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
     return () => {
-      document.body.style.overflow = prev;
+      document.body.style.overflow = previousOverflow;
     };
   }, [isOpen]);
 
-  const handleOpen = () => {
-    if (isBlocked) return;
-    setIsOpen(true);
-    setConfirmEmail('');
-    setPassword('');
-    setError('');
-  };
+  const handleDelete = async (event) => {
+    event.preventDefault();
 
-  const handleClose = () => {
-    if (!loading) {
-      setIsOpen(false);
-      setConfirmEmail('');
-      setPassword('');
-      setError('');
-    }
-  };
-
-  const handleDelete = async () => {
     if (!canDelete || loading) return;
 
     setLoading(true);
-    setError('');
+    setError("");
 
     try {
       const body = {};
       if (hasPassword) body.password = password;
 
-      const res = await fetch('/api/users/me', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch("/api/users/me", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
 
-      const data = await res.json();
+      const data = await response.json().catch(() => ({}));
 
-      if (!res.ok) {
-        setError(data.error || 'Failed to delete account');
-        setLoading(false);
+      if (!response.ok) {
+        setError(data.error || "Unable to delete your account. Please try again.");
         return;
       }
 
-      // Success → sign out → redirect
       await signOut({ redirect: false });
-      router.push('/login');
+      router.replace("/login");
       router.refresh();
     } catch (err) {
-      console.error('[DELETE_ACCOUNT]', err);
-      setError('Network error. Please try again.');
+      console.error("[DELETE_ACCOUNT]", err);
+      setError("A network error occurred. Please try again.");
+    } finally {
       setLoading(false);
     }
   };
 
   return (
     <>
-      {/* ─── Trigger ─── */}
       <button
         type="button"
         onClick={handleOpen}
         disabled={isBlocked}
         title={
           isBlocked
-            ? 'Delete or transfer your workspaces first'
-            : 'Delete your account'
+            ? "Delete or transfer your workspaces first"
+            : "Permanently delete your account"
         }
-        aria-disabled={isBlocked}
-        className={`
-          px-3.5 py-2 rounded-lg flex-shrink-0
-          text-[13px] font-medium
-          transition-all duration-150
-          ${
-            isBlocked
-              ? 'bg-gray-200 dark:bg-white/[0.04] text-gray-400 dark:text-gray-600 cursor-not-allowed'
-              : 'bg-red-600 hover:bg-red-700 text-white active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500/40'
-          }
-        `}
+        className={`inline-flex items-center justify-center gap-2 rounded-xl border px-3.5 py-2.5 text-xs font-medium transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500/40 ${
+          isBlocked
+            ? "cursor-not-allowed border-white/[0.06] bg-white/[0.025] text-zinc-600"
+            : "border-red-400/20 bg-red-500/[0.08] text-red-300 hover:border-red-400/30 hover:bg-red-500/[0.14] active:scale-[0.98]"
+        }`}
       >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+          <path d="M3 6h18M8 6V4h8v2m-9 0 1 14h8l1-14M10 10v6m4-6v6" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
         Delete account
       </button>
 
-      {/* ══════════ CONFIRM MODAL ══════════ */}
       <AnimatePresence>
         {isOpen && (
           <motion.div
-            key="delete-account"
+            key="delete-account-backdrop"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.18, ease: 'easeOut' }}
-            onClick={handleClose}
-            className="
-              fixed inset-0 z-50
-              flex items-center justify-center
-              p-3 sm:p-4
-              bg-black/50 dark:bg-black/70
-              backdrop-blur-sm
-            "
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="delete-account-title"
-            aria-describedby="delete-account-desc"
+            transition={{ duration: 0.18 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-black/75 p-3 backdrop-blur-md sm:p-5"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) handleClose();
+            }}
           >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.96, y: 8 }}
+            <motion.section
+              ref={dialogRef}
+              initial={{ opacity: 0, scale: 0.97, y: 10 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.97, y: 4 }}
-              transition={{ duration: 0.2, ease: 'easeOut' }}
-              onClick={(e) => e.stopPropagation()}
-              className="
-                relative w-full max-w-md
-                bg-white dark:bg-[#0f1115]
-                rounded-2xl
-                border border-gray-200 dark:border-white/[0.08]
-                shadow-2xl shadow-black/20 dark:shadow-black/60
-                max-h-[92vh] overflow-y-auto
-              "
+              exit={{ opacity: 0, scale: 0.98, y: 5 }}
+              transition={{ duration: 0.2, ease: "easeOut" }}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="delete-account-title"
+              aria-describedby="delete-account-description"
+              className="relative my-auto w-full max-w-md overflow-hidden rounded-2xl border border-white/[0.1] bg-[#0e0f13] shadow-[0_30px_100px_rgba(0,0,0,0.65)]"
             >
-              {/* ─── Header ─── */}
-              <div
-                className="
-                  flex items-center gap-3
-                  px-5 py-4
-                  border-b border-gray-200 dark:border-white/[0.06]
-                "
-              >
-                <div
-                  className="
-                    w-9 h-9 rounded-full flex-shrink-0
-                    bg-red-500/10 dark:bg-red-500/15
-                    flex items-center justify-center
-                  "
-                >
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    className="text-red-600 dark:text-red-400"
-                    aria-hidden="true"
-                  >
-                    <path
-                      d="M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
+              <div className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-red-500/[0.09] to-transparent" />
+
+              <header className="relative flex items-center gap-3 border-b border-white/[0.07] px-5 py-4 sm:px-6">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-red-400/15 bg-red-500/[0.09] text-red-300">
+                  <svg width="19" height="19" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
+                    <path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h16.9a2 2 0 0 0 1.8-3l-8.5-14.1a2 2 0 0 0-3.4 0Z" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
-                </div>
-                <h2
-                  id="delete-account-title"
-                  className="text-[14px] font-semibold text-gray-900 dark:text-white"
-                >
-                  Delete account
-                </h2>
-              </div>
+                </span>
 
-              {/* ─── Body ─── */}
-              <div className="p-5 sm:p-6 space-y-5">
-                {error && (
-                  <div
-                    role="alert"
-                    className="
-                      rounded-xl px-3.5 py-3
-                      bg-red-500/[0.07] dark:bg-red-500/10
-                      border border-red-500/20
-                    "
-                  >
-                    <p className="text-[12.5px] text-red-700 dark:text-red-300">
-                      {error}
-                    </p>
-                  </div>
-                )}
-
-                <div
-                  className="
-                    rounded-xl px-3.5 py-3
-                    bg-red-500/[0.07] dark:bg-red-500/10
-                    border border-red-500/20
-                  "
-                >
-                  <p
-                    id="delete-account-desc"
-                    className="text-[12.5px] text-red-700 dark:text-red-300 leading-relaxed"
-                  >
-                    <strong className="font-semibold">
-                      This cannot be undone.
-                    </strong>{' '}
-                    Your account, memberships, tasks you created, and all
-                    related data will be permanently removed.
+                <div className="min-w-0 flex-1">
+                  <h2 id="delete-account-title" className="text-sm font-semibold text-white">
+                    Delete account
+                  </h2>
+                  <p className="mt-1 text-xs text-zinc-500">
+                    Permanently remove your account
                   </p>
                 </div>
 
-                {/* Confirm email */}
-                <div>
-                  <label
-                    htmlFor="confirm-email"
-                    className="block text-[12.5px] font-medium text-gray-700 dark:text-gray-300 mb-1.5"
-                  >
-                    Type{' '}
-                    <span className="font-mono text-red-600 dark:text-red-400">
-                      {userEmail}
-                    </span>{' '}
-                    to confirm
-                  </label>
-                  <input
-                    id="confirm-email"
-                    type="email"
-                    value={confirmEmail}
-                    onChange={(e) => setConfirmEmail(e.target.value)}
-                    placeholder={userEmail}
-                    autoFocus
-                    disabled={loading}
-                    aria-invalid={confirmEmail.length > 0 && !emailMatches}
-                    className="
-                      w-full px-3 py-2.5 rounded-xl
-                      text-[13px] font-mono
-                      bg-white dark:bg-white/[0.03]
-                      text-gray-900 dark:text-white
-                      placeholder-gray-400 dark:placeholder-gray-500
-                      border border-gray-200 dark:border-white/[0.08]
-                      focus:outline-none
-                      focus:ring-2 focus:ring-red-500/20
-                      focus:border-red-500 dark:focus:border-red-500/60
-                      disabled:opacity-60
-                      transition-all duration-150
-                    "
-                  />
-                </div>
-
-                {/* Password (credentials users only) */}
-                {hasPassword && (
-                  <div>
-                    <label
-                      htmlFor="confirm-password"
-                      className="block text-[12.5px] font-medium text-gray-700 dark:text-gray-300 mb-1.5"
-                    >
-                      Your password
-                    </label>
-                    <input
-                      id="confirm-password"
-                      type="password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="Enter your password"
-                      disabled={loading}
-                      autoComplete="current-password"
-                      className="
-                        w-full px-3 py-2.5 rounded-xl
-                        text-[13px]
-                        bg-white dark:bg-white/[0.03]
-                        text-gray-900 dark:text-white
-                        placeholder-gray-400 dark:placeholder-gray-500
-                        border border-gray-200 dark:border-white/[0.08]
-                        focus:outline-none
-                        focus:ring-2 focus:ring-red-500/20
-                        focus:border-red-500 dark:focus:border-red-500/60
-                        disabled:opacity-60
-                        transition-all duration-150
-                      "
-                    />
-                  </div>
-                )}
-              </div>
-
-              {/* ─── Footer ─── */}
-              <div className="px-5 sm:px-6 pb-5 sm:pb-6 flex gap-3">
                 <button
                   type="button"
                   onClick={handleClose}
                   disabled={loading}
-                  className="
-                    flex-1 py-2.5 rounded-xl
-                    border border-gray-300 dark:border-white/[0.08]
-                    text-gray-700 dark:text-gray-300
-                    text-[13px] font-medium
-                    hover:bg-gray-50 dark:hover:bg-white/[0.04]
-                    active:scale-[0.98]
-                    focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40
-                    disabled:opacity-50 disabled:cursor-not-allowed
-                    transition-all duration-150
-                  "
+                  aria-label="Close dialog"
+                  className="rounded-lg p-2 text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-white disabled:opacity-40"
                 >
-                  Cancel
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                    <path d="m18 6-12 12M6 6l12 12" strokeLinecap="round" />
+                  </svg>
                 </button>
-                <button
-                  type="button"
-                  onClick={handleDelete}
-                  disabled={!canDelete || loading}
-                  className="
-                    flex-1 py-2.5 rounded-xl
-                    bg-red-600 hover:bg-red-700
-                    disabled:bg-gray-200 dark:disabled:bg-white/[0.06]
-                    disabled:text-gray-400 dark:disabled:text-gray-500
-                    disabled:cursor-not-allowed
-                    active:scale-[0.98]
-                    focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500/40
-                    text-white text-[13px] font-medium
-                    transition-all duration-150
-                    inline-flex items-center justify-center gap-2
-                  "
-                >
-                  {loading ? (
-                    <>
-                      <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                      Deleting…
-                    </>
-                  ) : (
-                    'Delete permanently'
+              </header>
+
+              <form onSubmit={handleDelete}>
+                <div className="relative space-y-5 p-5 sm:p-6">
+                  <div
+                    id="delete-account-description"
+                    className="rounded-xl border border-red-400/15 bg-red-500/[0.055] p-4"
+                  >
+                    <p className="text-[13px] font-medium text-red-200">
+                      This action cannot be undone.
+                    </p>
+                    <p className="mt-1.5 text-xs leading-5 text-zinc-400">
+                      Your account and associated data may be permanently
+                      removed. Review any workspace or project data you need
+                      before continuing.
+                    </p>
+                  </div>
+
+                  {isBlocked && (
+                    <p role="alert" className="text-xs leading-5 text-red-300">
+                      You own {ownedWorkspaceCount} workspace
+                      {ownedWorkspaceCount === 1 ? "" : "s"}. Transfer ownership
+                      or delete those workspaces before deleting your account.
+                    </p>
                   )}
-                </button>
-              </div>
-            </motion.div>
+
+                  {error && (
+                    <div role="alert" className="rounded-xl border border-red-400/20 bg-red-500/[0.07] px-3.5 py-3">
+                      <p className="text-xs leading-5 text-red-300">{error}</p>
+                    </div>
+                  )}
+
+                  <div>
+                    <label htmlFor="confirm-delete-email" className="mb-2 block text-xs font-medium text-zinc-300">
+                      Confirm your email address
+                    </label>
+                    <p className="mb-2 break-all font-mono text-xs text-zinc-500">
+                      {userEmail || "Email unavailable"}
+                    </p>
+                    <input
+                      ref={emailInputRef}
+                      id="confirm-delete-email"
+                      type="email"
+                      value={confirmEmail}
+                      onChange={(event) => setConfirmEmail(event.target.value)}
+                      placeholder="Enter your email address"
+                      autoComplete="email"
+                      disabled={loading || isBlocked || !userEmail}
+                      aria-invalid={confirmEmail.length > 0 && !emailMatches}
+                      required
+                      className="w-full rounded-xl border border-white/[0.09] bg-white/[0.025] px-3.5 py-3 text-sm text-white outline-none transition-all placeholder:text-zinc-600 focus:border-red-400/50 focus:ring-2 focus:ring-red-500/10 disabled:opacity-50"
+                    />
+                    {confirmEmail.length > 0 && !emailMatches && (
+                      <p className="mt-1.5 text-[11px] text-red-300">
+                        The email address does not match your account.
+                      </p>
+                    )}
+                  </div>
+
+                  {hasPassword && (
+                    <div>
+                      <label htmlFor="confirm-delete-password" className="mb-2 block text-xs font-medium text-zinc-300">
+                        Account password
+                      </label>
+                      <input
+                        id="confirm-delete-password"
+                        type="password"
+                        value={password}
+                        onChange={(event) => setPassword(event.target.value)}
+                        placeholder="Enter your password"
+                        autoComplete="current-password"
+                        disabled={loading || isBlocked}
+                        required
+                        className="w-full rounded-xl border border-white/[0.09] bg-white/[0.025] px-3.5 py-3 text-sm text-white outline-none transition-all placeholder:text-zinc-600 focus:border-red-400/50 focus:ring-2 focus:ring-red-500/10 disabled:opacity-50"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                <footer className="flex flex-col-reverse gap-2 border-t border-white/[0.07] bg-black/15 px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
+                  <button
+                    type="button"
+                    onClick={handleClose}
+                    disabled={loading}
+                    className="rounded-xl border border-white/[0.09] px-4 py-2.5 text-xs font-medium text-zinc-300 transition-colors hover:bg-white/[0.04] focus:outline-none focus-visible:ring-2 focus-visible:ring-white/20 disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    type="submit"
+                    disabled={!canDelete || loading}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-400/20 bg-red-500 px-4 py-2.5 text-xs font-semibold text-white transition-all hover:bg-red-400 active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400/40 disabled:cursor-not-allowed disabled:border-white/[0.06] disabled:bg-white/[0.06] disabled:text-zinc-500"
+                  >
+                    {loading ? (
+                      <>
+                        <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                        Deleting account…
+                      </>
+                    ) : (
+                      "Delete permanently"
+                    )}
+                  </button>
+                </footer>
+              </form>
+            </motion.section>
           </motion.div>
         )}
       </AnimatePresence>
     </>
   );
-};
-
-export default DeleteAccountButton;
+}

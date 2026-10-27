@@ -1,17 +1,154 @@
 // -------------------------------------------------------------
-// CommandPalette - Cmd+K Global Search & Quick Actions
+// CommandPalette - Global Search & Quick Actions
 // -------------------------------------------------------------
-//
-// DEPENDENCIES:
-//   npm install cmdk
+// Dependencies:
+//   npm install cmdk framer-motion
 // -------------------------------------------------------------
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Command } from "cmdk";
 import { motion, AnimatePresence } from "framer-motion";
+
+const EMPTY_RESULTS = {
+  tasks: [],
+  projects: [],
+  workspaces: [],
+};
+
+function Icon({ name, size = 18, className = "" }) {
+  const common = {
+    width: size,
+    height: size,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.7,
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+    className,
+    "aria-hidden": true,
+  };
+
+  const paths = {
+    search: (
+      <>
+        <circle cx="11" cy="11" r="7" />
+        <path d="m20 20-4-4" />
+      </>
+    ),
+    check: (
+      <>
+        <path d="m9 12 2 2 4-4" />
+        <path d="M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9" />
+      </>
+    ),
+    plus: <path d="M12 5v14M5 12h14" />,
+    folder: (
+      <path d="M3 7a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+    ),
+    workspace: (
+      <>
+        <rect x="3" y="3" width="7" height="7" rx="1.5" />
+        <rect x="14" y="3" width="7" height="7" rx="1.5" />
+        <rect x="3" y="14" width="7" height="7" rx="1.5" />
+        <rect x="14" y="14" width="7" height="7" rx="1.5" />
+      </>
+    ),
+    home: (
+      <>
+        <path d="m3 10 9-7 9 7" />
+        <path d="M5 9v11h14V9" />
+        <path d="M9 20v-6h6v6" />
+      </>
+    ),
+    arrow: <path d="M7 17 17 7M7 7h10v10" />,
+    clock: (
+      <>
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 7v5l3 2" />
+      </>
+    ),
+    close: <path d="m18 6-12 12M6 6l12 12" />,
+    sparkle: (
+      <>
+        <path d="m12 3 1.9 5.8L20 11l-6.1 2.2L12 19l-1.9-5.8L4 11l6.1-2.2z" />
+        <path d="m19 14 1.2 2.8L23 18l-2.8 1.2L19 22l-1.2-2.8L15 18l2.8-1.2z" />
+      </>
+    ),
+  };
+
+  return <svg {...common}>{paths[name] || paths.search}</svg>;
+}
+
+function ActionIcon({ icon, tone = "neutral" }) {
+  const tones = {
+    rose: "bg-rose-500/10 text-rose-300 ring-rose-400/15",
+    emerald: "bg-emerald-500/10 text-emerald-300 ring-emerald-400/15",
+    violet: "bg-violet-500/10 text-violet-300 ring-violet-400/15",
+    blue: "bg-sky-500/10 text-sky-300 ring-sky-400/15",
+    neutral: "bg-white/[0.045] text-zinc-300 ring-white/[0.07]",
+  };
+
+  return (
+    <span
+      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ring-1 ${tones[tone] || tones.neutral}`}
+    >
+      <Icon name={icon} size={17} />
+    </span>
+  );
+}
+
+function Shortcut({ children }) {
+  return (
+    <kbd className="inline-flex min-h-6 min-w-6 items-center justify-center rounded-md border border-white/[0.09] bg-white/[0.045] px-1.5 font-mono text-[10px] text-zinc-400">
+      {children}
+    </kbd>
+  );
+}
+
+function ResultItem({ children, onSelect, value, icon, tone = "neutral", detail }) {
+  return (
+    <Command.Item
+      value={value}
+      onSelect={onSelect}
+      className="group flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-zinc-300 outline-none transition-colors aria-selected:bg-white/[0.07] aria-selected:text-white"
+    >
+      <ActionIcon icon={icon} tone={tone} />
+
+      <span className="min-w-0 flex-1 truncate font-medium">{children}</span>
+
+      {detail && (
+        <span className="hidden max-w-[38%] truncate text-xs text-zinc-500 sm:block">
+          {detail}
+        </span>
+      )}
+
+      <Icon
+        name="arrow"
+        size={14}
+        className="shrink-0 text-zinc-600 opacity-0 transition-all group-aria-selected:translate-x-0.5 group-aria-selected:opacity-100"
+      />
+    </Command.Item>
+  );
+}
+
+function SectionHeading({ children, count }) {
+  return (
+    <div className="flex items-center justify-between px-3 pb-2 pt-3 first:pt-1">
+      <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
+        {children}
+      </span>
+      {typeof count === "number" && (
+        <span className="text-[10px] tabular-nums text-zinc-600">
+          {count}
+        </span>
+      )}
+    </div>
+  );
+}
 
 export default function CommandPalette({
   open,
@@ -22,344 +159,490 @@ export default function CommandPalette({
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
-  const [results, setResults] = useState({
-    tasks: [],
-    projects: [],
-    workspaces: [],
-  });
+  const [error, setError] = useState("");
+  const [results, setResults] = useState(EMPTY_RESULTS);
+  const requestIdRef = useRef(0);
+  const inputRef = useRef(null);
 
-  // ─── Fetch Data when query changes ───
-  useEffect(() => {
-    if (!open) {
-      setQuery("");
-      setResults({ tasks: [], projects: [], workspaces: [] });
-      return;
-    }
-
-    if (query.length < 2) {
-      setResults({ tasks: [], projects: [], workspaces: [] });
-      return;
-    }
-
-    const timer = setTimeout(async () => {
-      setLoading(true);
-      try {
-        const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
-        if (res.ok) {
-          const data = await res.json();
-          setResults(data);
-        }
-      } catch (err) {
-        console.error("Search failed", err);
-      } finally {
-        setLoading(false);
-      }
-    }, 300); // 300ms debounce
-
-    return () => clearTimeout(timer);
-  }, [query, open]);
-
-  // ─── Keyboard listener for Escape ───
-  useEffect(() => {
-    const down = (e) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("keydown", down);
-    return () => document.removeEventListener("keydown", down);
+  const closePalette = useCallback(() => {
+    setOpen(false);
   }, [setOpen]);
 
-  // ─── Action Handlers ───
-  const runAction = (action) => {
-    setOpen(false);
-    setTimeout(() => action(), 100);
-  };
+  const resetSearch = useCallback(() => {
+    requestIdRef.current += 1;
+    setQuery("");
+    setResults(EMPTY_RESULTS);
+    setError("");
+    setLoading(false);
+  }, []);
 
-  const handleNavigate = (path) => {
-    runAction(() => router.push(path));
-  };
+  // Global keyboard shortcuts.
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      const isShortcut = (event.metaKey || event.ctrlKey) &&
+        event.key.toLowerCase() === "k";
 
+      if (isShortcut) {
+        event.preventDefault();
+        setOpen((current) => !current);
+      }
+
+      if (event.key === "Escape" && open) {
+        event.preventDefault();
+        closePalette();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [open, setOpen, closePalette]);
+
+  // Reset when the palette closes.
+  useEffect(() => {
+    if (!open) {
+      resetSearch();
+    }
+  }, [open, resetSearch]);
+
+  // Focus the search field when opened.
+  useEffect(() => {
+    if (!open) return;
+
+    const frame = requestAnimationFrame(() => {
+      inputRef.current?.focus();
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [open]);
+
+  // Debounced search with stale-response protection.
+  useEffect(() => {
+    const normalizedQuery = query.trim();
+
+    if (!open || normalizedQuery.length < 2) {
+      requestIdRef.current += 1;
+      setResults(EMPTY_RESULTS);
+      setError("");
+      setLoading(false);
+      return;
+    }
+
+    const requestId = ++requestIdRef.current;
+    const controller = new AbortController();
+
+    setLoading(true);
+    setError("");
+
+    const timer = setTimeout(async () => {
+      try {
+        const response = await fetch(
+          `/api/search?q=${encodeURIComponent(normalizedQuery)}`,
+          {
+            signal: controller.signal,
+            headers: { Accept: "application/json" },
+          },
+        );
+
+        if (!response.ok) {
+          throw new Error("Search request failed.");
+        }
+
+        const data = await response.json();
+
+        if (requestId !== requestIdRef.current) return;
+
+        setResults({
+          tasks: Array.isArray(data.tasks) ? data.tasks : [],
+          projects: Array.isArray(data.projects) ? data.projects : [],
+          workspaces: Array.isArray(data.workspaces) ? data.workspaces : [],
+        });
+      } catch (err) {
+        if (err.name === "AbortError") return;
+        if (requestId !== requestIdRef.current) return;
+
+        console.error("Command palette search failed:", err);
+        setResults(EMPTY_RESULTS);
+        setError("Search couldn't be completed. Please try again.");
+      } finally {
+        if (requestId === requestIdRef.current) {
+          setLoading(false);
+        }
+      }
+    }, 250);
+
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [query, open]);
+
+  const handleNavigate = useCallback(
+    (path) => {
+      closePalette();
+
+      // Allow the exit animation to begin before navigation.
+      window.setTimeout(() => router.push(path), 100);
+    },
+    [closePalette, router],
+  );
+
+  const normalizedQuery = query.trim();
+  const showQuickActions = normalizedQuery.length < 2;
   const hasResults =
     results.tasks.length > 0 ||
     results.projects.length > 0 ||
     results.workspaces.length > 0;
-  const showRecent = query.length < 2;
+
+  const totalResults =
+    results.tasks.length +
+    results.projects.length +
+    results.workspaces.length;
 
   return (
-    <AnimatePresence>
+    <AnimatePresence
+      onExitComplete={() => {
+        if (!open) resetSearch();
+      }}
+    >
       {open && (
         <motion.div
+          key="command-palette-backdrop"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.15 }}
-          className="fixed inset-0 z-[100] flex items-start justify-center pt-[15vh] px-4 bg-black/40 dark:bg-black/60 backdrop-blur-sm"
-          onClick={() => setOpen(false)}
+          className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-black/65 px-3 pb-8 pt-[10vh] backdrop-blur-md sm:px-6 sm:pt-[14vh]"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) closePalette();
+          }}
+          role="presentation"
         >
           <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: -10 }}
+            initial={{ opacity: 0, scale: 0.97, y: -12 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: -10 }}
-            transition={{ duration: 0.2, ease: "easeOut" }}
-            onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-xl bg-white dark:bg-[#0f1115] rounded-2xl shadow-2xl border border-gray-200 dark:border-white/[0.1] overflow-hidden"
+            exit={{ opacity: 0, scale: 0.98, y: -8 }}
+            transition={{ duration: 0.18, ease: "easeOut" }}
+            className="relative w-full max-w-2xl overflow-hidden rounded-2xl border border-white/[0.11] bg-[#0d0e12] shadow-[0_30px_100px_rgba(0,0,0,0.65)]"
+            onMouseDown={(event) => event.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Search TeamFlow"
           >
+            {/* Decorative top glow */}
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-violet-500/[0.09] to-transparent"
+            />
+
             <Command
-              className="flex flex-col w-full h-full"
+              className="relative flex max-h-[min(76vh,680px)] flex-col"
               shouldFilter={false}
               loop
             >
-              {/* ─── Input Area ─── */}
-              <div className="flex items-center px-4 border-b border-gray-100 dark:border-white/[0.06]">
-                <svg
-                  className="w-5 h-5 text-gray-400"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <circle cx="11" cy="11" r="8" />
-                  <path
-                    d="M21 21l-4.35-4.35"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
+              {/* Search input */}
+              <div className="flex items-center gap-3 border-b border-white/[0.08] px-4 sm:px-5">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/[0.07] bg-white/[0.035] text-zinc-400">
+                  <Icon name="search" size={18} />
+                </span>
 
                 <Command.Input
+                  ref={inputRef}
                   value={query}
                   onValueChange={setQuery}
-                  placeholder="Search tasks, projects, or type a command..."
-                  className="flex-1 px-3 py-4 bg-transparent text-[15px] text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none"
-                  autoFocus
+                  placeholder="Search anything in TeamFlow..."
+                  aria-label="Search tasks, projects, and workspaces"
+                  className="h-[62px] min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-zinc-600 sm:text-[15px]"
                 />
 
                 {loading && (
-                  <span className="w-4 h-4 border-2 border-gray-300 dark:border-gray-600 border-t-indigo-500 rounded-full animate-spin" />
+                  <span
+                    className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-white/10 border-t-violet-400"
+                    aria-label="Searching"
+                    role="status"
+                  />
                 )}
 
-                {!loading && (
-                  <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-medium bg-gray-100 dark:bg-white/[0.06] text-gray-500 rounded-md">
-                    ESC
-                  </kbd>
+                {!loading && query && (
+                  <button
+                    type="button"
+                    onClick={() => setQuery("")}
+                    className="rounded-lg p-1.5 text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-white"
+                    aria-label="Clear search"
+                  >
+                    <Icon name="close" size={16} />
+                  </button>
                 )}
+
+                <button
+                  type="button"
+                  onClick={closePalette}
+                  className="hidden items-center gap-1 rounded-lg border border-white/[0.08] bg-white/[0.035] px-2 py-1.5 text-[10px] text-zinc-500 transition-colors hover:text-white sm:flex"
+                  aria-label="Close search"
+                >
+                  ESC
+                </button>
               </div>
 
-              {/* ─── Results Area ─── */}
-              <Command.List className="max-h-[350px] overflow-y-auto p-2 scroll-smooth">
-                <Command.Empty className="py-12 text-center text-[13px] text-gray-500">
-                  No results found for &quot;{query}&quot;.
-                </Command.Empty>
-
-                {/* RECENT / QUICK ACTIONS (When input is empty) */}
-                {showRecent && (
-                  <Command.Group
-                    heading="Quick Actions"
-                    className="px-2 py-1 text-[11px] font-semibold text-gray-500 dark:text-gray-400"
-                  >
-                    <Command.Item
-                      onSelect={() => handleNavigate("/my-tasks")}
-                      className="flex items-center gap-3 px-3 py-2.5 mt-1 rounded-xl text-[13px] text-gray-900 dark:text-white cursor-pointer aria-selected:bg-indigo-50 dark:aria-selected:bg-white/[0.06] transition-colors"
-                    >
-                      <span className="w-6 h-6 rounded-md bg-rose-100 dark:bg-rose-500/15 text-rose-600 dark:text-rose-400 flex items-center justify-center">
-                        <svg
-                          width="12"
-                          height="12"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2.5"
-                        >
-                          <path d="M9 11l3 3L22 4" />
-                          <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" />
-                        </svg>
+              {/* Content */}
+              <Command.List className="min-h-0 flex-1 overflow-y-auto p-2.5 sm:p-3">
+                {/* Quick actions */}
+                {showQuickActions && (
+                  <>
+                    <div className="flex items-center gap-2 px-3 pb-2 pt-2">
+                      <Icon
+                        name="sparkle"
+                        size={14}
+                        className="text-violet-300"
+                      />
+                      <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
+                        Quick actions
                       </span>
-                      Go to My Tasks
-                    </Command.Item>
+                    </div>
 
-                    {/* Contextual Actions */}
-                    {projectId && (
-                      <Command.Item
-                        onSelect={() =>
-                          handleNavigate(
-                            `/workspaces/${workspaceId}/projects/${projectId}?new=true`,
-                          )
-                        }
-                        className="flex items-center gap-3 px-3 py-2.5 mt-1 rounded-xl text-[13px] text-gray-900 dark:text-white cursor-pointer aria-selected:bg-indigo-50 dark:aria-selected:bg-white/[0.06] transition-colors"
+                    <Command.Group>
+                      <ResultItem
+                        value="Go to My Tasks"
+                        icon="check"
+                        tone="rose"
+                        onSelect={() => handleNavigate("/my-tasks")}
                       >
-                        <span className="w-6 h-6 rounded-md bg-emerald-100 dark:bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
-                          <svg
-                            width="12"
-                            height="12"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2.5"
-                          >
-                            <path d="M12 5v14M5 12h14" />
-                          </svg>
-                        </span>
-                        Create Task
-                      </Command.Item>
-                    )}
+                        Go to My Tasks
+                      </ResultItem>
 
-                    {workspaceId && (
-                      <Command.Item
-                        onSelect={() =>
-                          handleNavigate(`/workspaces/${workspaceId}?new=true`)
-                        }
-                        className="flex items-center gap-3 px-3 py-2.5 mt-1 rounded-xl text-[13px] text-gray-900 dark:text-white cursor-pointer aria-selected:bg-indigo-50 dark:aria-selected:bg-white/[0.06] transition-colors"
-                      >
-                        <span className="w-6 h-6 rounded-md bg-violet-100 dark:bg-violet-500/15 text-violet-600 dark:text-violet-400 flex items-center justify-center">
-                          <svg
-                            width="12"
-                            height="12"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2.5"
-                          >
-                            <path d="M12 5v14M5 12h14" />
-                          </svg>
-                        </span>
-                        Create Project
-                      </Command.Item>
-                    )}
-
-                    <Command.Item
-                      onSelect={() => handleNavigate("/workspaces?new=true")}
-                      className="flex items-center gap-3 px-3 py-2.5 mt-1 rounded-xl text-[13px] text-gray-900 dark:text-white cursor-pointer aria-selected:bg-indigo-50 dark:aria-selected:bg-white/[0.06] transition-colors"
-                    >
-                      <span className="w-6 h-6 rounded-md bg-blue-100 dark:bg-blue-500/15 text-blue-600 dark:text-blue-400 flex items-center justify-center">
-                        <svg
-                          width="12"
-                          height="12"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2.5"
+                      {projectId && workspaceId && (
+                        <ResultItem
+                          value="Create Task"
+                          icon="plus"
+                          tone="emerald"
+                          onSelect={() =>
+                            handleNavigate(
+                              `/workspaces/${workspaceId}/projects/${projectId}?new=true`,
+                            )
+                          }
                         >
-                          <path d="M12 5v14M5 12h14" />
-                        </svg>
+                          Create Task
+                        </ResultItem>
+                      )}
+
+                      {workspaceId && (
+                        <ResultItem
+                          value="Create Project"
+                          icon="folder"
+                          tone="violet"
+                          onSelect={() =>
+                            handleNavigate(
+                              `/workspaces/${workspaceId}?new=true`,
+                            )
+                          }
+                        >
+                          Create Project
+                        </ResultItem>
+                      )}
+
+                      <ResultItem
+                        value="Create Workspace"
+                        icon="workspace"
+                        tone="blue"
+                        onSelect={() =>
+                          handleNavigate("/workspaces?new=true")
+                        }
+                      >
+                        Create Workspace
+                      </ResultItem>
+                    </Command.Group>
+
+                    <div className="mx-3 my-3 border-t border-white/[0.06]" />
+
+                    <div className="flex flex-wrap items-center justify-between gap-2 px-3 pb-2 text-[11px] text-zinc-600">
+                      <span>Navigate your workspace faster</span>
+                      <span className="flex items-center gap-1.5">
+                        <Shortcut>↑</Shortcut>
+                        <Shortcut>↓</Shortcut>
+                        <span>to navigate</span>
+                        <Shortcut>↵</Shortcut>
+                        <span>to open</span>
                       </span>
-                      Create Workspace
-                    </Command.Item>
-                  </Command.Group>
+                    </div>
+                  </>
                 )}
 
-                {/* SEARCH RESULTS (When input has text) */}
-                {!showRecent && hasResults && (
+                {/* Minimum query hint */}
+                {!showQuickActions && normalizedQuery.length < 2 && (
+                  <div className="px-4 py-12 text-center">
+                    <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-2xl border border-white/[0.07] bg-white/[0.035] text-zinc-500">
+                      <Icon name="search" size={20} />
+                    </div>
+                    <p className="text-sm text-zinc-300">
+                      Keep typing to search
+                    </p>
+                    <p className="mt-1 text-xs text-zinc-600">
+                      Enter at least 2 characters.
+                    </p>
+                  </div>
+                )}
+
+                {/* Loading state */}
+                {!showQuickActions && loading && !hasResults && !error && (
+                  <div className="px-4 py-12 text-center">
+                    <div className="mx-auto mb-3 h-6 w-6 animate-spin rounded-full border-2 border-white/10 border-t-violet-400" />
+                    <p className="text-sm text-zinc-400">Searching TeamFlow...</p>
+                  </div>
+                )}
+
+                {/* Error state */}
+                {!showQuickActions && !loading && error && (
+                  <div className="px-4 py-12 text-center">
+                    <p className="text-sm text-rose-300">{error}</p>
+                    <button
+                      type="button"
+                      onClick={() => setQuery((current) => `${current} `)}
+                      className="mt-3 rounded-lg border border-white/[0.09] px-3 py-2 text-xs text-zinc-300 transition-colors hover:bg-white/[0.05]"
+                    >
+                      Try again
+                    </button>
+                  </div>
+                )}
+
+                {/* Empty state */}
+                {!showQuickActions &&
+                  !loading &&
+                  !error &&
+                  !hasResults && (
+                    <Command.Empty forceMount>
+                      <div className="px-4 py-12 text-center">
+                        <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-2xl border border-white/[0.07] bg-white/[0.035] text-zinc-500">
+                          <Icon name="search" size={20} />
+                        </div>
+                        <p className="text-sm font-medium text-zinc-300">
+                          No results found
+                        </p>
+                        <p className="mt-1 break-words text-xs text-zinc-600">
+                          Nothing matched &quot;{normalizedQuery}&quot;.
+                        </p>
+                      </div>
+                    </Command.Empty>
+                  )}
+
+                {/* Search results */}
+                {!showQuickActions && hasResults && (
                   <>
-                    {/* Tasks */}
+                    <div className="flex items-center justify-between px-3 pb-1 pt-2">
+                      <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
+                        Search results
+                      </span>
+                      <span className="text-[10px] tabular-nums text-zinc-600">
+                        {totalResults} found
+                      </span>
+                    </div>
+
                     {results.tasks.length > 0 && (
-                      <Command.Group
-                        heading="Tasks"
-                        className="px-2 py-1 text-[11px] font-semibold text-gray-500 dark:text-gray-400"
-                      >
+                      <Command.Group>
+                        <SectionHeading count={results.tasks.length}>
+                          Tasks
+                        </SectionHeading>
+
                         {results.tasks.map((task) => (
-                          <Command.Item
-                            key={task.id}
-                            onSelect={() =>
+                          <ResultItem
+                            key={`task-${task.id}`}
+                            value={`task ${task.title} ${task.project?.name || ""}`}
+                            icon="check"
+                            tone="rose"
+                            detail={task.project?.name}
+                            onSelect={() => {
+                              if (
+                                !task.project?.workspaceId ||
+                                !task.projectId ||
+                                !task.id
+                              ) {
+                                return;
+                              }
+
                               handleNavigate(
                                 `/workspaces/${task.project.workspaceId}/projects/${task.projectId}/tasks/${task.id}`,
-                              )
-                            }
-                            className="flex items-center gap-3 px-3 py-2 mt-0.5 rounded-xl text-[13px] text-gray-900 dark:text-white cursor-pointer aria-selected:bg-indigo-50 dark:aria-selected:bg-white/[0.06] transition-colors"
+                              );
+                            }}
                           >
-                            <span className="w-5 h-5 rounded-md bg-gray-100 dark:bg-white/[0.06] flex items-center justify-center">
-                              <svg
-                                width="12"
-                                height="12"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2"
-                              >
-                                <path d="M9 11l3 3L22 4" />
-                              </svg>
-                            </span>
-                            <span className="flex-1 truncate">
-                              {task.title}
-                            </span>
-                            <span className="text-[10px] text-gray-500">
-                              {task.project.name}
-                            </span>
-                          </Command.Item>
+                            {task.title}
+                          </ResultItem>
                         ))}
                       </Command.Group>
                     )}
 
-                    {/* Projects */}
                     {results.projects.length > 0 && (
-                      <Command.Group
-                        heading="Projects"
-                        className="px-2 py-1 mt-2 text-[11px] font-semibold text-gray-500 dark:text-gray-400"
-                      >
-                        {results.projects.map((proj) => (
-                          <Command.Item
-                            key={proj.id}
-                            onSelect={() =>
+                      <Command.Group>
+                        <SectionHeading count={results.projects.length}>
+                          Projects
+                        </SectionHeading>
+
+                        {results.projects.map((project) => (
+                          <ResultItem
+                            key={`project-${project.id}`}
+                            value={`project ${project.name} ${project.workspace?.name || ""}`}
+                            icon="folder"
+                            tone="violet"
+                            detail={project.workspace?.name}
+                            onSelect={() => {
+                              if (!project.workspaceId || !project.id) return;
+
                               handleNavigate(
-                                `/workspaces/${proj.workspaceId}/projects/${proj.id}`,
-                              )
-                            }
-                            className="flex items-center gap-3 px-3 py-2 mt-0.5 rounded-xl text-[13px] text-gray-900 dark:text-white cursor-pointer aria-selected:bg-indigo-50 dark:aria-selected:bg-white/[0.06] transition-colors"
+                                `/workspaces/${project.workspaceId}/projects/${project.id}`,
+                              );
+                            }}
                           >
-                            <span className="w-5 h-5 rounded-md bg-violet-100 dark:bg-violet-500/15 text-violet-600 dark:text-violet-400 flex items-center justify-center">
-                              <svg
-                                width="12"
-                                height="12"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2"
-                              >
-                                <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
-                              </svg>
-                            </span>
-                            <span className="flex-1 truncate">{proj.name}</span>
-                            <span className="text-[10px] text-gray-500">
-                              {proj.workspace.name}
-                            </span>
-                          </Command.Item>
+                            {project.name}
+                          </ResultItem>
                         ))}
                       </Command.Group>
                     )}
 
-                    {/* Workspaces */}
                     {results.workspaces.length > 0 && (
-                      <Command.Group
-                        heading="Workspaces"
-                        className="px-2 py-1 mt-2 text-[11px] font-semibold text-gray-500 dark:text-gray-400"
-                      >
-                        {results.workspaces.map((ws) => (
-                          <Command.Item
-                            key={ws.id}
-                            onSelect={() =>
-                              handleNavigate(`/workspaces/${ws.id}`)
-                            }
-                            className="flex items-center gap-3 px-3 py-2 mt-0.5 rounded-xl text-[13px] text-gray-900 dark:text-white cursor-pointer aria-selected:bg-indigo-50 dark:aria-selected:bg-white/[0.06] transition-colors"
+                      <Command.Group>
+                        <SectionHeading count={results.workspaces.length}>
+                          Workspaces
+                        </SectionHeading>
+
+                        {results.workspaces.map((workspace) => (
+                          <ResultItem
+                            key={`workspace-${workspace.id}`}
+                            value={`workspace ${workspace.name}`}
+                            icon="workspace"
+                            tone="blue"
+                            onSelect={() => {
+                              if (!workspace.id) return;
+                              handleNavigate(`/workspaces/${workspace.id}`);
+                            }}
                           >
-                            <span className="w-5 h-5 rounded-md bg-indigo-100 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
-                              <svg
-                                width="12"
-                                height="12"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2"
-                              >
-                                <path d="M3 11.5 12 4l9 7.5" />
-                                <path d="M5 10.5V20h14v-9.5" />
-                              </svg>
-                            </span>
-                            <span className="flex-1 truncate">{ws.name}</span>
-                          </Command.Item>
+                            {workspace.name}
+                          </ResultItem>
                         ))}
                       </Command.Group>
                     )}
                   </>
                 )}
               </Command.List>
+
+              {/* Footer */}
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/[0.07] bg-black/20 px-4 py-3 sm:px-5">
+                <div className="flex items-center gap-2">
+                  <span className="flex h-5 w-5 items-center justify-center rounded-md bg-violet-500/15 text-[10px] font-bold text-violet-300">
+                    TF
+                  </span>
+                  <span className="text-[10px] font-medium tracking-wide text-zinc-500">
+                    TEAMFLOW COMMAND
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-3 text-[10px] text-zinc-600">
+                  <span className="flex items-center gap-1.5">
+                    <Shortcut>↵</Shortcut>
+                    Select
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <Shortcut>ESC</Shortcut>
+                    Close
+                  </span>
+                </div>
+              </div>
             </Command>
           </motion.div>
         </motion.div>

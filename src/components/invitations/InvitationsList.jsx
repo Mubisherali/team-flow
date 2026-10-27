@@ -1,45 +1,27 @@
 // -------------------------------------------------------------
-// InvitationsList - Client wrapper for the invitations page
-// -------------------------------------------------------------
-//
-// WHEN USED:
-//   Rendered by /invitations page. Takes server-fetched
-//   invitations and renders InviteCard for each, with an
-//   empty state when there are none.
-//
-// PROPS:
-//   initialInvitations : array from the server component
-//
-// STATE:
-//   Tracks removed invite IDs so the list updates instantly
-//   after Accept / Decline, without needing a full refetch.
-//
-// POLISH:
-//   - AnimatePresence for smooth removal
-//   - Empty state with glass emerald icon
-//   - Consistent type scale
-//
-// PRESERVED:
-//   - Server-side data shapes (id, token, workspace, etc.)
+// InvitationsList — Animated client-side invitation list
 // -------------------------------------------------------------
 
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 
-import InviteCard from './InviteCard';
+import InviteCard from "./InviteCard";
 
-const InvitationsList = ({ initialInvitations = [] }) => {
+export default function InvitationsList({ initialInvitations = [] }) {
   const [invitations, setInvitations] = useState(initialInvitations);
 
   const handleAccepted = (invitation) => {
-    // Remove immediately — user redirects to workspace anyway.
-    setInvitations((prev) => prev.filter((i) => i.id !== invitation.id));
+    setInvitations((previous) =>
+      previous.filter((item) => item.id !== invitation.id)
+    );
   };
 
   const handleDeclined = (invitation) => {
-    setInvitations((prev) => prev.filter((i) => i.id !== invitation.id));
+    setInvitations((previous) =>
+      previous.filter((item) => item.id !== invitation.id)
+    );
   };
 
   if (invitations.length === 0) {
@@ -48,67 +30,107 @@ const InvitationsList = ({ initialInvitations = [] }) => {
 
   return (
     <div className="space-y-3">
-      <AnimatePresence initial={false}>
-        {invitations.map((inv) => (
-          <InviteCard
-            key={inv.id}
-            invitation={inv}
-            onAccepted={handleAccepted}
-            onDeclined={handleDeclined}
-          />
+      <AnimatePresence initial={false} mode="popLayout">
+        {invitations.map((invitation, index) => (
+          <motion.div
+            key={invitation.id}
+            layout
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{
+              opacity: 0,
+              x: 16,
+              scale: 0.985,
+              transition: { duration: 0.18, ease: "easeOut" },
+            }}
+            transition={{
+              duration: 0.28,
+              delay: Math.min(index * 0.045, 0.18),
+              ease: [0.22, 1, 0.36, 1],
+            }}
+          >
+            <InviteCard
+              invitation={invitation}
+              onAccepted={handleAccepted}
+              onDeclined={handleDeclined}
+            />
+          </motion.div>
         ))}
       </AnimatePresence>
     </div>
   );
-};
+}
 
-// =============================================================
+// -------------------------------------------------------------
 // Empty state
-// =============================================================
-const EmptyInvitations = () => (
-  <motion.div
-    initial={{ opacity: 0, y: 4 }}
-    animate={{ opacity: 1, y: 0 }}
-    transition={{ duration: 0.25, ease: 'easeOut' }}
-    className="
-      rounded-2xl py-16 px-6 text-center
-      border border-dashed
-      border-gray-300 dark:border-white/[0.08]
-      bg-white/60 dark:bg-white/[0.02]
-    "
-  >
-    <div
-      className="
-        w-14 h-14 mx-auto mb-4 rounded-full
-        bg-emerald-500/10 dark:bg-emerald-500/15
-        flex items-center justify-center
-      "
-      aria-hidden="true"
+// -------------------------------------------------------------
+function EmptyInvitations() {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+      className="relative overflow-hidden rounded-xl border border-dashed border-gray-300/80 bg-gray-50/70 px-5 py-14 text-center dark:border-white/[0.09] dark:bg-white/[0.015] sm:px-8 sm:py-16"
     >
-      <svg
-        width="22"
-        height="22"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        className="text-emerald-600 dark:text-emerald-400"
-      >
-        <path
-          d="M20 6L9 17l-5-5"
+      {/* Subtle decoration */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute left-1/2 top-0 h-32 w-64 -translate-x-1/2 rounded-full bg-emerald-500/[0.06] blur-3xl"
+      />
+
+      <div className="relative mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-emerald-500/15 bg-emerald-500/[0.07] text-emerald-600 dark:border-emerald-400/15 dark:bg-emerald-400/[0.07] dark:text-emerald-400">
+        <svg
+          aria-hidden="true"
+          width="27"
+          height="27"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
           strokeLinecap="round"
           strokeLinejoin="round"
-        />
-      </svg>
-    </div>
+        >
+          <rect x="3" y="5" width="18" height="14" rx="3" />
+          <path d="m4 7 8 6 8-6" />
+          <path d="m9 15 2 2 4-4" />
+        </svg>
 
-    <h3 className="text-[14px] font-semibold text-gray-900 dark:text-white mb-1">
-      No pending invitations
-    </h3>
-    <p className="text-[12.5px] text-gray-500 dark:text-gray-400 max-w-sm mx-auto leading-relaxed">
-      When someone invites you to a workspace, you&apos;ll see it here.
-    </p>
-  </motion.div>
-);
+        <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-emerald-500 text-white dark:border-[#0d0e12]">
+          <svg
+            aria-hidden="true"
+            width="10"
+            height="10"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="3"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="m5 12 4 4L19 6" />
+          </svg>
+        </span>
+      </div>
 
-export default InvitationsList;
+      <div className="relative mx-auto mt-5 max-w-sm">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-400">
+          All caught up
+        </p>
+
+        <h3 className="mt-2 text-lg font-semibold tracking-tight text-gray-950 dark:text-white">
+          No pending invitations
+        </h3>
+
+        <p className="mx-auto mt-2 max-w-xs text-[13px] leading-6 text-gray-600 dark:text-gray-400">
+          You’re all clear for now. When someone invites you to a workspace,
+          their invitation will appear here.
+        </p>
+      </div>
+
+      <div className="relative mx-auto mt-6 flex w-fit items-center gap-2 rounded-full border border-gray-200/80 bg-white/80 px-3 py-2 text-[11px] text-gray-500 dark:border-white/[0.08] dark:bg-white/[0.025] dark:text-gray-400">
+        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+        Your workspace access is up to date
+      </div>
+    </motion.div>
+  );
+}

@@ -1,21 +1,3 @@
-// -------------------------------------------------------------
-// Task Page - Full-page view for a single task
-// -------------------------------------------------------------
-//
-// (header comment preserved from previous version + note below)
-//
-// PERMISSIONS:
-//   canEdit   — assignee OR creator OR owner/manager (edit fields)
-//   canDelete — owner/manager ONLY (delete is destructive)
-//
-// PRESERVED:
-//   - All server logic (auth → workspace → hierarchy checks)
-//   - Promise.all fetches (task + project + workspace)
-//   - 404 on any mismatch (no info leak)
-//   - Project-member gate for non-privileged users
-//   - canEdit mirror of server canMutateTask
-// -------------------------------------------------------------
-
 import { notFound, redirect } from 'next/navigation';
 import { getServerSession } from 'next-auth';
 
@@ -25,52 +7,83 @@ import { getMemberRole, canViewWorkspace } from '@/lib/permissions';
 import TaskPageView from '@/components/task/TaskPageView';
 
 export default async function TaskPage({ params }) {
-  // ─── Auth ───
+  // Authentication
   const session = await getServerSession(authOptions);
+
   if (!session?.user?.id) {
     redirect('/login');
   }
 
   const { id: workspaceId, projectId, taskId } = await params;
 
-  // ─── Workspace membership check ───
+  // Workspace membership and visibility
   const role = await getMemberRole(session.user.id, workspaceId);
+
   if (!canViewWorkspace(role)) {
     notFound();
   }
 
   const isPrivileged = role === 'OWNER' || role === 'MANAGER';
 
-  // ─── Fetch task + project + workspace in parallel ───
+  // Fetch the task, project, and workspace concurrently.
   const [task, project, workspace] = await Promise.all([
     prisma.task.findUnique({
       where: { id: taskId },
       include: {
         assignee: {
-          select: { id: true, name: true, email: true, avatarUrl: true },
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            avatarUrl: true,
+          },
         },
         createdBy: {
-          select: { id: true, name: true, email: true, avatarUrl: true },
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            avatarUrl: true,
+          },
         },
-        _count: { select: { comments: true } },
+        _count: {
+          select: { comments: true },
+        },
       },
     }),
+
     prisma.project.findUnique({
       where: { id: projectId },
-      select: { id: true, name: true, workspaceId: true },
+      select: {
+        id: true,
+        name: true,
+        workspaceId: true,
+      },
     }),
+
     prisma.workspace.findUnique({
       where: { id: workspaceId },
-      select: { id: true, name: true, slug: true },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+      },
     }),
   ]);
 
-  // ─── Validate the hierarchy ───
-  if (!task || !project || !workspace) notFound();
-  if (task.projectId !== projectId) notFound();
-  if (project.workspaceId !== workspaceId) notFound();
+  // Prevent cross-workspace and cross-project access.
+  if (!task || !project || !workspace) {
+    notFound();
+  }
 
-  // ─── Regular members must be project members to see the task ───
+  if (
+    task.projectId !== projectId ||
+    project.workspaceId !== workspaceId
+  ) {
+    notFound();
+  }
+
+  // Regular members must belong to the project.
   if (!isPrivileged) {
     const projectMember = await prisma.projectMember.findUnique({
       where: {
@@ -79,22 +92,31 @@ export default async function TaskPage({ params }) {
           userId: session.user.id,
         },
       },
+      select: { id: true },
     });
-    if (!projectMember) notFound();
+
+    if (!projectMember) {
+      notFound();
+    }
   }
 
-  // ─── Fetch project members (for the assignee dropdown) ───
+  // Project members are used by the assignee selector.
   const projectMembers = await prisma.projectMember.findMany({
     where: { projectId },
     include: {
       user: {
-        select: { id: true, name: true, email: true, avatarUrl: true },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          avatarUrl: true,
+        },
       },
     },
     orderBy: { addedAt: 'asc' },
   });
 
-  // ─── Shape for the client ───
+  // Serialize Prisma data before passing it to the client.
   const shapedTask = {
     id: task.id,
     projectId: task.projectId,
@@ -126,29 +148,30 @@ export default async function TaskPage({ params }) {
     updatedAt: task.updatedAt.toISOString(),
   };
 
-  const shapedMembers = projectMembers.map((m) => ({
-    id: m.id,
-    userId: m.user.id,
-    name: m.user.name,
-    email: m.user.email,
-    avatarUrl: m.user.avatarUrl,
+  const shapedMembers = projectMembers.map((member) => ({
+    id: member.id,
+    userId: member.user.id,
+    name: member.user.name,
+    email: member.user.email,
+    avatarUrl: member.user.avatarUrl,
   }));
 
-  // ─── Permissions ───
-  // canEdit: field-level edits — assignee OR creator OR privileged.
-  // canDelete: destructive — privileged only. Members can never delete.
+  // Editing: assignee, creator, owner, or manager.
   const canEdit =
     isPrivileged ||
     task.assigneeId === session.user.id ||
     task.createdById === session.user.id;
 
+  // Deletion: owner or manager only.
   const canDelete = isPrivileged;
 
-  // ─── Render ───
   return (
     <TaskPageView
       task={shapedTask}
-      project={{ id: project.id, name: project.name }}
+      project={{
+        id: project.id,
+        name: project.name,
+      }}
       workspace={{
         id: workspace.id,
         name: workspace.name,
