@@ -251,18 +251,20 @@ export default function TeamFlowAssistant({ workspaceId }) {
           body: JSON.stringify({
             workspaceId,
             message: text,
-            history: previousMessages
-              .filter(
-                (item) =>
-                  ["user", "model"].includes(item.role) &&
-                  typeof item.text === "string" &&
-                  item.text.trim()
-              )
-              .slice(-6)
-              .map(({ role, text: historyText }) => ({
-                role,
-                text: historyText,
-              })),
+           
+history: previousMessages
+  .filter(
+    (item) =>
+      ["user", "model"].includes(item.role) &&
+      typeof item.text === "string" &&
+      item.text.trim().length > 0
+  )
+  .slice(-6)
+  .map(({ role, text: historyText }) => ({
+    role,
+    text: historyText.slice(-2000),
+  })),
+
           }),
           signal: controller.signal,
         });
