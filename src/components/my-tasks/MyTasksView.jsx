@@ -1,90 +1,130 @@
+
 // -------------------------------------------------------------
 // MyTasksView - Grouped list of user's tasks across workspaces
 // -------------------------------------------------------------
 //
 // FEATURES:
-//   - Summary Stats (Total, Due This Week, Overdue)
-//   - Filter Pills (All, Overdue, High Priority)
-//   - Grouping Toggle (By Date vs By Project)
+//   - Summary statistics
+//   - All / Overdue / Today / High Priority filters
+//   - Group by date or project
+//   - Animated task sections
+//   - Responsive, premium TeamFlow styling
 // -------------------------------------------------------------
 
 "use client";
 
 import { useState, useMemo } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import TaskRow from "./TaskRow";
 
-const MyTasksView = ({ tasks }) => {
-  const [filter, setFilter] = useState("all"); // 'all' | 'overdue' | 'today' | 'high'
-  const [groupBy, setGroupBy] = useState("date"); // 'date' | 'project'
+// -------------------------------------------------------------
+// MAIN
+// -------------------------------------------------------------
 
-  // 1. Calculate Summary Stats
+const MyTasksView = ({ tasks = [] }) => {
+  const [filter, setFilter] = useState("all");
+  const [groupBy, setGroupBy] = useState("date");
+
+  // -----------------------------------------------------------
+  // SUMMARY STATS
+  // -----------------------------------------------------------
+
   const stats = useMemo(() => {
     let overdue = 0;
     let dueThisWeek = 0;
+
     const now = new Date();
     now.setHours(0, 0, 0, 0);
-    const nextWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
-    tasks.forEach((t) => {
-      if (t.status === "DONE") return;
-      if (t.dueDate) {
-        const due = new Date(t.dueDate);
-        due.setHours(0, 0, 0, 0);
-        if (due < now) overdue++;
-        else if (due <= nextWeek) dueThisWeek++;
+    const nextWeek = new Date(now);
+    nextWeek.setDate(nextWeek.getDate() + 7);
+
+    tasks.forEach((task) => {
+      if (task.status === "DONE" || !task.dueDate) return;
+
+      const due = new Date(task.dueDate);
+
+      if (Number.isNaN(due.getTime())) return;
+
+      due.setHours(0, 0, 0, 0);
+
+      if (due < now) {
+        overdue++;
+      } else if (due <= nextWeek) {
+        dueThisWeek++;
       }
     });
 
     return {
-      total: tasks.filter((t) => t.status !== "DONE").length,
+      total: tasks.filter((task) => task.status !== "DONE").length,
       dueThisWeek,
       overdue,
     };
   }, [tasks]);
 
-  // 2. Apply Filters
+  // -----------------------------------------------------------
+  // FILTER TASKS
+  // -----------------------------------------------------------
+
   const filteredTasks = useMemo(() => {
     if (filter === "all") return tasks;
+
     const now = new Date();
     now.setHours(0, 0, 0, 0);
 
-    return tasks.filter((t) => {
-      if (t.status === "DONE") return false; // Hide completed on specific filters
+    return tasks.filter((task) => {
+      if (task.status === "DONE") return false;
 
-      if (filter === "high")
-        return t.priority === "HIGH" || t.priority === "URGENT";
-
-      if (t.dueDate) {
-        const due = new Date(t.dueDate);
-        due.setHours(0, 0, 0, 0);
-        if (filter === "overdue") return due < now;
-        if (filter === "today") return due.getTime() === now.getTime();
+      if (filter === "high") {
+        return (
+          task.priority === "HIGH" ||
+          task.priority === "URGENT"
+        );
       }
+
+      if (!task.dueDate) return false;
+
+      const due = new Date(task.dueDate);
+
+      if (Number.isNaN(due.getTime())) return false;
+
+      due.setHours(0, 0, 0, 0);
+
+      if (filter === "overdue") return due < now;
+      if (filter === "today") return due.getTime() === now.getTime();
+
       return false;
     });
   }, [tasks, filter]);
 
-  // 3. Group Data
+  // -----------------------------------------------------------
+  // GROUP TASKS
+  // -----------------------------------------------------------
+
   const grouped = useMemo(() => {
     if (groupBy === "project") {
-      // Group by Project
       const map = new Map();
-      filteredTasks.forEach((t) => {
-        if (!map.has(t.project.id)) {
-          map.set(t.project.id, {
-            title: t.project.name,
-            workspace: t.project.workspace.name,
+
+      filteredTasks.forEach((task) => {
+        const projectId = task.project?.id || task.projectId;
+
+        if (!map.has(projectId)) {
+          map.set(projectId, {
+            id: projectId,
+            title: task.project?.name || "Untitled project",
+            workspace: task.project?.workspace?.name || "Workspace",
             tasks: [],
           });
         }
-        map.get(t.project.id).tasks.push(t);
+
+        map.get(projectId).tasks.push(task);
       });
+
       return Array.from(map.values()).sort((a, b) =>
-        a.title.localeCompare(b.title),
+        a.title.localeCompare(b.title)
       );
     }
 
-    // Group by Date (Urgency)
     const groups = {
       overdue: [],
       today: [],
@@ -92,198 +132,259 @@ const MyTasksView = ({ tasks }) => {
       noDate: [],
       completed: [],
     };
+
     const now = new Date();
     now.setHours(0, 0, 0, 0);
-    const nextWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
-    filteredTasks.forEach((t) => {
-      if (t.status === "DONE") {
-        groups.completed.push(t);
-        return;
-      }
-      if (!t.dueDate) {
-        groups.noDate.push(t);
+    const nextWeek = new Date(now);
+    nextWeek.setDate(nextWeek.getDate() + 7);
+
+    filteredTasks.forEach((task) => {
+      if (task.status === "DONE") {
+        groups.completed.push(task);
         return;
       }
 
-      const due = new Date(t.dueDate);
+      if (!task.dueDate) {
+        groups.noDate.push(task);
+        return;
+      }
+
+      const due = new Date(task.dueDate);
+
+      if (Number.isNaN(due.getTime())) {
+        groups.noDate.push(task);
+        return;
+      }
+
       due.setHours(0, 0, 0, 0);
-      if (due < now) groups.overdue.push(t);
-      else if (due.getTime() === now.getTime()) groups.today.push(t);
-      else if (due <= nextWeek) groups.upcoming.push(t);
-      else groups.noDate.push(t);
+
+      if (due < now) {
+        groups.overdue.push(task);
+      } else if (due.getTime() === now.getTime()) {
+        groups.today.push(task);
+      } else if (due <= nextWeek) {
+        groups.upcoming.push(task);
+      } else {
+        // Keep the original grouping behavior for tasks
+        // scheduled beyond the next seven days.
+        groups.noDate.push(task);
+      }
     });
 
     return groups;
   }, [filteredTasks, groupBy]);
 
-  if (tasks.length === 0) return <EmptyState />;
+  // -----------------------------------------------------------
+  // EMPTY ACCOUNT STATE
+  // -----------------------------------------------------------
+
+  if (tasks.length === 0) {
+    return <EmptyState />;
+  }
+
+  // -----------------------------------------------------------
+  // RENDER
+  // -----------------------------------------------------------
 
   return (
     <div className="space-y-8">
-      {/* ─── SUMMARY STATS ─── */}
-      <div className="grid grid-cols-3 gap-3 sm:gap-4">
-        <StatCard
-          label="Open Tasks"
-          value={stats.total}
-          icon={
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <path d="M9 11l3 3L22 4" />
-              <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" />
-            </svg>
-          }
-        />
-        <StatCard
-          label="Due This Week"
-          value={stats.dueThisWeek}
-          icon={
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-              <line x1="16" y1="2" x2="16" y2="6" />
-              <line x1="8" y1="2" x2="8" y2="6" />
-              <line x1="3" y1="10" x2="21" y2="10" />
-            </svg>
-          }
-        />
-        <StatCard
-          label="Overdue"
-          value={stats.overdue}
-          danger={stats.overdue > 0}
-          icon={
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <circle cx="12" cy="12" r="10" />
-              <path d="M12 8v4M12 16h.01" />
-            </svg>
-          }
-        />
-      </div>
-
-      {/* ─── CONTROLS ─── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        {/* Filter Pills */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 -mx-1 px-1">
-          <FilterPill
-            label="All"
-            active={filter === "all"}
-            onClick={() => setFilter("all")}
-          />
-          <FilterPill
-            label="Overdue"
-            active={filter === "overdue"}
-            onClick={() => setFilter("overdue")}
-            count={stats.overdue}
-          />
-          <FilterPill
-            label="Today"
-            active={filter === "today"}
-            onClick={() => setFilter("today")}
-          />
-          <FilterPill
-            label="High Priority"
-            active={filter === "high"}
-            onClick={() => setFilter("high")}
-          />
-        </div>
-
-        {/* Group Toggle */}
-        <div className="flex items-center gap-1 bg-gray-100 dark:bg-white/[0.04] p-1 rounded-lg flex-shrink-0">
-          <button
-            onClick={() => setGroupBy("date")}
-            className={`px-3 py-1.5 rounded-md text-[12px] font-medium transition-colors ${groupBy === "date" ? "bg-white dark:bg-[#111318] text-gray-900 dark:text-white shadow-sm" : "text-gray-500 hover:text-gray-700 dark:text-gray-400"}`}
-          >
-            By Date
-          </button>
-          <button
-            onClick={() => setGroupBy("project")}
-            className={`px-3 py-1.5 rounded-md text-[12px] font-medium transition-colors ${groupBy === "project" ? "bg-white dark:bg-[#111318] text-gray-900 dark:text-white shadow-sm" : "text-gray-500 hover:text-gray-700 dark:text-gray-400"}`}
-          >
-            By Project
-          </button>
-        </div>
-      </div>
-
-      {/* ─── LIST ─── */}
-      <div>
-        {filteredTasks.length === 0 ? (
-          <div className="py-12 text-center border border-dashed border-gray-200 dark:border-white/[0.08] rounded-2xl">
-            <p className="text-[13px] text-gray-500">
-              No tasks match this filter.
+      {/* Summary */}
+      <section aria-label="Task summary">
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-indigo-500 dark:text-indigo-300">
+              Overview
             </p>
+            <h2 className="mt-1 text-sm font-semibold text-gray-900 dark:text-[#f5f5f0]">
+              Your workload
+            </h2>
           </div>
+
+          <span className="font-mono text-[10px] text-gray-400 dark:text-white/25">
+            TASK SUMMARY
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
+          <StatCard
+            label="Open tasks"
+            value={stats.total}
+            detail="Still to be completed"
+            icon={<CheckSquareIcon />}
+          />
+
+          <StatCard
+            label="Due this week"
+            value={stats.dueThisWeek}
+            detail="Within the next 7 days"
+            icon={<CalendarIcon />}
+          />
+
+          <StatCard
+            label="Overdue"
+            value={stats.overdue}
+            detail={stats.overdue > 0 ? "Needs your attention" : "You're all caught up"}
+            danger={stats.overdue > 0}
+            icon={<AlertIcon />}
+          />
+        </div>
+      </section>
+
+      {/* Filters and grouping controls */}
+      <section className="space-y-4">
+        <div className="flex flex-col gap-4 border-b border-gray-200 pb-4 dark:border-white/[0.07] sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-white/30">
+              Task management
+            </p>
+            <h2 className="mt-1 text-base font-semibold tracking-tight text-gray-900 dark:text-[#f5f5f0]">
+              My tasks
+            </h2>
+          </div>
+
+          <div className="inline-flex w-fit items-center gap-1 rounded-xl border border-gray-200 bg-white p-1 dark:border-white/[0.08] dark:bg-white/[0.025]">
+            <GroupButton
+              active={groupBy === "date"}
+              onClick={() => setGroupBy("date")}
+              icon={<CalendarIcon />}
+            >
+              By date
+            </GroupButton>
+
+            <GroupButton
+              active={groupBy === "project"}
+              onClick={() => setGroupBy("project")}
+              icon={<FolderIcon />}
+            >
+              By project
+            </GroupButton>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-center gap-2 overflow-x-auto pb-1">
+            <FilterPill
+              label="All tasks"
+              active={filter === "all"}
+              onClick={() => setFilter("all")}
+            />
+
+            <FilterPill
+              label="Overdue"
+              active={filter === "overdue"}
+              onClick={() => setFilter("overdue")}
+              count={stats.overdue}
+              danger
+            />
+
+            <FilterPill
+              label="Today"
+              active={filter === "today"}
+              onClick={() => setFilter("today")}
+            />
+
+            <FilterPill
+              label="High priority"
+              active={filter === "high"}
+              onClick={() => setFilter("high")}
+            />
+          </div>
+
+          <span
+            aria-live="polite"
+            className="shrink-0 text-[11px] text-gray-400 dark:text-white/30"
+          >
+            {filteredTasks.length}{" "}
+            {filteredTasks.length === 1 ? "task" : "tasks"}
+          </span>
+        </div>
+      </section>
+
+      {/* Task list */}
+      <div aria-label="Filtered tasks">
+        {filteredTasks.length === 0 ? (
+          <NoMatchingTasks filter={filter} onReset={() => setFilter("all")} />
         ) : groupBy === "date" ? (
           <div className="space-y-8">
-            {grouped.overdue.length > 0 && (
-              <Section
-                title="Overdue"
-                count={grouped.overdue.length}
-                color="text-red-600 dark:text-red-400"
-                tasks={grouped.overdue}
-              />
-            )}
-            {grouped.today.length > 0 && (
-              <Section
-                title="Today"
-                count={grouped.today.length}
-                color="text-amber-600 dark:text-amber-400"
-                tasks={grouped.today}
-              />
-            )}
-            {grouped.upcoming.length > 0 && (
-              <Section
-                title="Upcoming"
-                count={grouped.upcoming.length}
-                tasks={grouped.upcoming}
-              />
-            )}
-            {grouped.noDate.length > 0 && (
-              <Section
-                title="No Due Date"
-                count={grouped.noDate.length}
-                tasks={grouped.noDate}
-              />
-            )}
-            {grouped.completed.length > 0 && (
-              <Section
-                title="Completed"
-                count={grouped.completed.length}
-                muted
-                tasks={grouped.completed.slice(0, 10)}
-              />
-            )}
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={`${filter}-${groupBy}`}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -5 }}
+                transition={{ duration: 0.18 }}
+                className="space-y-8"
+              >
+                {grouped.overdue.length > 0 && (
+                  <Section
+                    title="Overdue"
+                    subtitle="Past due date"
+                    count={grouped.overdue.length}
+                    color="danger"
+                    tasks={grouped.overdue}
+                  />
+                )}
+
+                {grouped.today.length > 0 && (
+                  <Section
+                    title="Today"
+                    subtitle="Due today"
+                    count={grouped.today.length}
+                    color="warning"
+                    tasks={grouped.today}
+                  />
+                )}
+
+                {grouped.upcoming.length > 0 && (
+                  <Section
+                    title="Upcoming"
+                    subtitle="Within seven days"
+                    count={grouped.upcoming.length}
+                    tasks={grouped.upcoming}
+                  />
+                )}
+
+                {grouped.noDate.length > 0 && (
+                  <Section
+                    title="No due date"
+                    count={grouped.noDate.length}
+                    tasks={grouped.noDate}
+                  />
+                )}
+
+                {grouped.completed.length > 0 && (
+                  <Section
+                    title="Completed"
+                    count={grouped.completed.length}
+                    muted
+                    tasks={grouped.completed.slice(0, 10)}
+                  />
+                )}
+              </motion.div>
+            </AnimatePresence>
           </div>
         ) : (
-          <div className="space-y-8">
-            {grouped.map((group) => (
-              <Section
-                key={group.title}
-                title={group.title}
-                subtitle={group.workspace}
-                count={group.tasks.length}
-                tasks={group.tasks}
-              />
-            ))}
-          </div>
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={`${filter}-${groupBy}`}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -5 }}
+              transition={{ duration: 0.18 }}
+              className="space-y-8"
+            >
+              {grouped.map((group) => (
+                <Section
+                  key={group.id}
+                  title={group.title}
+                  subtitle={group.workspace}
+                  count={group.tasks.length}
+                  tasks={group.tasks}
+                />
+              ))}
+            </motion.div>
+          </AnimatePresence>
         )}
       </div>
     </div>
@@ -291,35 +392,99 @@ const MyTasksView = ({ tasks }) => {
 };
 
 // =============================================================
-// Sub-components
+// StatCard
 // =============================================================
-const StatCard = ({ label, value, icon, danger }) => (
-  <div className="rounded-2xl p-4 border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-[#0f1115] flex items-center gap-3">
-    <div
-      className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${danger ? "bg-red-500/10 text-red-600 dark:text-red-400" : "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400"}`}
-    >
-      {icon}
-    </div>
-    <div>
-      <p
-        className={`text-[18px] font-semibold leading-tight ${danger ? "text-red-600 dark:text-red-400" : "text-gray-900 dark:text-white"}`}
+
+const StatCard = ({ label, value, detail, icon, danger = false }) => (
+  <div
+    className={`
+      relative overflow-hidden rounded-2xl border p-4 sm:p-5
+      transition-colors duration-200
+      ${
+        danger
+          ? "border-red-200/80 bg-red-50/50 dark:border-red-500/15 dark:bg-red-500/[0.035]"
+          : "border-gray-200 bg-white dark:border-white/[0.08] dark:bg-[#101010]"
+      }
+    `}
+  >
+    {danger && (
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-red-500/[0.06] blur-2xl"
+      />
+    )}
+
+    <div className="relative flex items-start justify-between gap-3">
+      <div>
+        <p className="text-[11px] font-medium text-gray-500 dark:text-white/45">
+          {label}
+        </p>
+
+        <p
+          className={`mt-3 text-3xl font-semibold tracking-[-0.05em] ${
+            danger
+              ? "text-red-600 dark:text-red-400"
+              : "text-gray-950 dark:text-[#f5f5f0]"
+          }`}
+        >
+          {value}
+        </p>
+
+        <p className="mt-2 text-[10px] text-gray-400 dark:text-white/30">
+          {detail}
+        </p>
+      </div>
+
+      <span
+        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
+          danger
+            ? "bg-red-500/10 text-red-600 dark:text-red-400"
+            : "bg-indigo-500/[0.08] text-indigo-600 dark:text-indigo-300"
+        }`}
       >
-        {value}
-      </p>
-      <p className="text-[11px] text-gray-500 dark:text-gray-400">{label}</p>
+        {icon}
+      </span>
     </div>
   </div>
 );
 
-const FilterPill = ({ label, active, onClick, count }) => (
+// =============================================================
+// FilterPill
+// =============================================================
+
+const FilterPill = ({
+  label,
+  active,
+  onClick,
+  count,
+  danger = false,
+}) => (
   <button
+    type="button"
     onClick={onClick}
-    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all duration-150 flex-shrink-0 border ${active ? "bg-indigo-50 dark:bg-indigo-500/15 border-indigo-200 dark:border-indigo-500/30 text-indigo-700 dark:text-indigo-300" : "bg-white dark:bg-white/[0.02] border-gray-200 dark:border-white/[0.06] text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/[0.04]"}`}
+    aria-pressed={active}
+    className={`
+      inline-flex shrink-0 items-center gap-2 rounded-lg border px-3 py-2
+      text-[11px] font-medium transition-all duration-150
+      focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500
+      ${
+        active
+          ? danger
+            ? "border-red-500/20 bg-red-500/[0.08] text-red-700 dark:text-red-300"
+            : "border-indigo-500/20 bg-indigo-500/[0.07] text-indigo-700 dark:text-indigo-300"
+          : "border-gray-200 bg-white text-gray-500 hover:border-gray-300 hover:text-gray-800 dark:border-white/[0.07] dark:bg-white/[0.02] dark:text-white/45 dark:hover:border-white/[0.14] dark:hover:text-white/75"
+      }
+    `}
   >
     {label}
-    {count > 0 && (
+
+    {typeof count === "number" && count > 0 && (
       <span
-        className={`px-1.5 py-0.5 rounded-md text-[10px] ${active ? "bg-indigo-200/50 dark:bg-indigo-500/30" : "bg-gray-100 dark:bg-white/[0.06]"}`}
+        className={`rounded-md px-1.5 py-0.5 font-mono text-[9px] ${
+          active
+            ? "bg-black/[0.05] dark:bg-white/[0.08]"
+            : "bg-gray-100 text-gray-500 dark:bg-white/[0.06] dark:text-white/45"
+        }`}
       >
         {count}
       </span>
@@ -327,69 +492,265 @@ const FilterPill = ({ label, active, onClick, count }) => (
   </button>
 );
 
+// =============================================================
+// GroupButton
+// =============================================================
+
+const GroupButton = ({ active, onClick, icon, children }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    aria-pressed={active}
+    className={`
+      inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2
+      text-[11px] font-medium transition-all duration-150
+      focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500
+      ${
+        active
+          ? "bg-gray-100 text-gray-900 shadow-sm dark:bg-white/[0.09] dark:text-white"
+          : "text-gray-500 hover:text-gray-800 dark:text-white/40 dark:hover:text-white/75"
+      }
+    `}
+  >
+    {icon}
+    {children}
+  </button>
+);
+
+// =============================================================
+// Section
+// =============================================================
+
+const SECTION_COLORS = {
+  danger: {
+    dot: "bg-red-500",
+    text: "text-red-600 dark:text-red-400",
+  },
+  warning: {
+    dot: "bg-amber-500",
+    text: "text-amber-600 dark:text-amber-400",
+  },
+  default: {
+    dot: "bg-indigo-500",
+    text: "text-gray-900 dark:text-[#f5f5f0]",
+  },
+};
+
 const Section = ({
   title,
   subtitle,
   count,
-  color = "text-gray-900 dark:text-white",
+  color = "default",
   muted = false,
   tasks,
-}) => (
-  <div>
-    <div className="flex items-center gap-2 mb-3 border-b border-gray-200 dark:border-white/[0.06] pb-2">
-      <h2
-        className={`text-[13px] font-semibold ${muted ? "text-gray-400 dark:text-gray-500" : color}`}
-      >
-        {title}
-      </h2>
-      <span className="text-[11px] font-medium px-1.5 py-0.5 rounded-md bg-gray-100 dark:bg-white/[0.06] text-gray-500 dark:text-gray-400">
-        {count}
-      </span>
-      {subtitle && (
-        <span className="text-[11px] text-gray-400 ml-1">• {subtitle}</span>
+}) => {
+  const style = SECTION_COLORS[color] || SECTION_COLORS.default;
+
+  return (
+    <section>
+      <div className="mb-3 flex items-center gap-3 border-b border-gray-200 pb-3 dark:border-white/[0.07]">
+        <span
+          className={`h-2 w-2 shrink-0 rounded-full ${
+            muted ? "bg-gray-300 dark:bg-white/20" : style.dot
+          }`}
+        />
+
+        <div className="min-w-0">
+          <h3
+            className={`text-[12px] font-semibold ${
+              muted
+                ? "text-gray-400 dark:text-white/35"
+                : style.text
+            }`}
+          >
+            {title}
+          </h3>
+
+          {subtitle && (
+            <p className="mt-0.5 text-[10px] text-gray-400 dark:text-white/30">
+              {subtitle}
+            </p>
+          )}
+        </div>
+
+        <span className="ml-auto rounded-md border border-gray-200 bg-white px-2 py-1 font-mono text-[10px] text-gray-500 dark:border-white/[0.07] dark:bg-white/[0.025] dark:text-white/40">
+          {String(count).padStart(2, "0")}
+        </span>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        {tasks.map((task) => (
+          <TaskRow
+            key={task.id}
+            task={task}
+            href={`/workspaces/${task.project.workspaceId}/projects/${task.projectId}/tasks/${task.id}`}
+          />
+        ))}
+      </div>
+    </section>
+  );
+};
+
+// =============================================================
+// NoMatchingTasks
+// =============================================================
+
+const NoMatchingTasks = ({ filter, onReset }) => {
+  const messages = {
+    overdue: {
+      title: "Nothing overdue",
+      description: "Great work. You have no overdue open tasks.",
+    },
+    today: {
+      title: "Nothing due today",
+      description: "There are no open tasks due today.",
+    },
+    high: {
+      title: "No high-priority tasks",
+      description: "You have no open high or urgent priority tasks.",
+    },
+    all: {
+      title: "No tasks to show",
+      description: "There are no tasks matching this view.",
+    },
+  };
+
+  const message = messages[filter] || messages.all;
+
+  return (
+    <div className="rounded-2xl border border-dashed border-gray-200 bg-white/50 px-5 py-14 text-center dark:border-white/[0.08] dark:bg-white/[0.015]">
+      <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-400 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-white/35">
+        <CheckSquareIcon />
+      </div>
+
+      <h3 className="mt-4 text-sm font-semibold text-gray-900 dark:text-white">
+        {message.title}
+      </h3>
+
+      <p className="mt-1.5 text-[12px] text-gray-500 dark:text-white/40">
+        {message.description}
+      </p>
+
+      {filter !== "all" && (
+        <button
+          type="button"
+          onClick={onReset}
+          className="mt-5 rounded-lg border border-gray-200 px-3 py-2 text-[11px] font-medium text-gray-600 transition-colors hover:border-indigo-500/30 hover:text-indigo-600 dark:border-white/[0.08] dark:text-white/60 dark:hover:text-indigo-300"
+        >
+          Clear filters
+        </button>
       )}
     </div>
-    <div className="flex flex-col gap-2.5">
-      {tasks.map((task) => (
-        <TaskRow
-          key={task.id}
-          task={task}
-          href={`/workspaces/${task.project.workspaceId}/projects/${task.projectId}/tasks/${task.id}`}
-        />
-      ))}
+  );
+};
+
+// =============================================================
+// EmptyState
+// =============================================================
+
+const EmptyState = () => (
+  <div className="relative overflow-hidden rounded-2xl border border-gray-200 bg-white px-5 py-16 text-center dark:border-white/[0.08] dark:bg-[#101010] sm:px-10">
+    <div
+      aria-hidden="true"
+      className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center_top,rgba(99,102,241,0.09),transparent_55%)]"
+    />
+
+    <div className="relative mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-emerald-500/15 bg-emerald-500/[0.08] text-emerald-600 dark:text-emerald-400">
+      <CheckSquareIcon className="h-6 w-6" />
+    </div>
+
+    <h2 className="relative mt-5 text-xl font-semibold tracking-tight text-gray-950 dark:text-[#f5f5f0]">
+      Your task list is clear.
+    </h2>
+
+    <p className="relative mx-auto mt-2 max-w-sm text-[12px] leading-6 text-gray-500 dark:text-white/40">
+      Tasks assigned to you across your workspaces will appear here. When
+      something needs your attention, you will find it in this view.
+    </p>
+
+    <div className="relative mt-6 inline-flex items-center gap-2 rounded-full border border-emerald-500/15 bg-emerald-500/[0.05] px-3 py-1.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-300">
+      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+      All caught up
     </div>
   </div>
 );
 
-const EmptyState = () => (
-  <div className="rounded-2xl py-16 px-6 text-center border border-dashed border-gray-300 dark:border-white/[0.08] bg-white/60 dark:bg-white/[0.02]">
-    <div
-      className="w-14 h-14 mx-auto mb-4 rounded-full bg-emerald-500/10 dark:bg-emerald-500/15 flex items-center justify-center"
+// =============================================================
+// Inline SVG icons
+// =============================================================
+
+function CheckSquareIcon({ className = "h-4 w-4" }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
       aria-hidden="true"
     >
-      <svg
-        width="24"
-        height="24"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        className="text-emerald-600 dark:text-emerald-400"
-      >
-        <path
-          d="M20 6L9 17l-5-5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    </div>
-    <h3 className="text-[14px] font-semibold text-gray-900 dark:text-white mb-1">
-      No assigned tasks
-    </h3>
-    <p className="text-[12.5px] text-gray-500 dark:text-gray-400">
-      When someone assigns a task to you, it will show up here.
-    </p>
-  </div>
-);
+      <rect x="3" y="3" width="18" height="18" rx="3" />
+      <path d="m8 12 3 3 5-6" />
+    </svg>
+  );
+}
+
+function CalendarIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="3" y="5" width="18" height="16" rx="2" />
+      <path d="M16 3v4M8 3v4M3 10h18" />
+    </svg>
+  );
+}
+
+function AlertIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 8v4M12 16h.01" />
+    </svg>
+  );
+}
+
+function FolderIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M3 7a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />
+    </svg>
+  );
+}
 
 export default MyTasksView;

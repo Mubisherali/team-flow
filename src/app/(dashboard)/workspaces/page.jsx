@@ -1,73 +1,101 @@
+
 // -------------------------------------------------------------
 // Workspaces List Page
 // -------------------------------------------------------------
 //
 // SERVER COMPONENT:
 //   - Auth check (defense in depth — layout also checks)
-//   - Fetches the user's workspaces from the DB
-//   - Passes them to a client wrapper
+//   - Fetches the user's workspaces directly through Prisma
+//   - Passes serializable data to the client wrapper
 //
-// WHY SERVER-SIDE FETCH:
-//   No API roundtrip — the server talks to Prisma directly.
-//   The client component gets plain JSON-serializable props.
-//
-// PADDING:
-//   Mobile-first: p-5 on phones, p-8 on sm+.
-//   Content is centered in a max-w-6xl container.
+// DESIGN:
+//   - Premium dark TeamFlow workspace experience
+//   - Responsive content container
+//   - Subtle background accents
+//   - Preserves existing authentication and data flow
 // -------------------------------------------------------------
 
-import { redirect } from 'next/navigation';
-import { getServerSession } from 'next-auth';
+import { redirect } from "next/navigation";
+import { getServerSession } from "next-auth";
 
-import { authOptions } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
-import WorkspaceListClient from '@/components/workspace/WorkspaceListClient';
+import { authOptions } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import WorkspaceListClient from "@/components/workspace/WorkspaceListClient";
 
 // -------------------------------------------------------------
 // PAGE METADATA
 // -------------------------------------------------------------
-// Sets the browser tab title. Next.js reads this export.
+
 export const metadata = {
-  title: 'Workspaces · TeamFlow',
+  title: "Workspaces · TeamFlow",
+  description: "Manage your TeamFlow workspaces, projects, and team collaboration.",
 };
 
+// -------------------------------------------------------------
+// PAGE
+// -------------------------------------------------------------
+
 export default async function WorkspacesPage() {
-  // ─── Auth check ───
+  // ─── Authentication ───
   const session = await getServerSession(authOptions);
+
   if (!session?.user?.id) {
-    redirect('/login');
+    redirect("/login");
   }
 
   // ─── Fetch workspaces ───
   const memberships = await prisma.workspaceMember.findMany({
-    where: { userId: session.user.id },
+    where: {
+      userId: session.user.id,
+    },
     include: {
       workspace: {
         include: {
           _count: {
-            select: { members: true, projects: true },
+            select: {
+              members: true,
+              projects: true,
+            },
           },
         },
       },
     },
-    orderBy: { joinedAt: 'desc' },
+    orderBy: {
+      joinedAt: "desc",
+    },
   });
 
-  const workspaces = memberships.map((m) => ({
-    id: m.workspace.id,
-    name: m.workspace.name,
-    slug: m.workspace.slug,
-    description: m.workspace.description,
-    role: m.role,
-    memberCount: m.workspace._count.members,
-    projectCount: m.workspace._count.projects,
-    createdAt: m.workspace.createdAt.toISOString(),
+  // ─── Serialize database results ───
+  const workspaces = memberships.map((membership) => ({
+    id: membership.workspace.id,
+    name: membership.workspace.name,
+    slug: membership.workspace.slug,
+    description: membership.workspace.description,
+    role: membership.role,
+    memberCount: membership.workspace._count.members,
+    projectCount: membership.workspace._count.projects,
+    createdAt: membership.workspace.createdAt.toISOString(),
   }));
 
   // ─── Render ───
   return (
-    <div className="p-5 sm:p-8 max-w-6xl mx-auto">
-      <WorkspaceListClient initialWorkspaces={workspaces} />
-    </div>
+    <main className="relative isolate min-h-full overflow-hidden">
+      {/* Ambient background accents */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 -z-10 overflow-hidden"
+      >
+        <div className="absolute -top-40 left-1/2 h-80 w-[36rem] -translate-x-1/2 rounded-full bg-indigo-500/[0.07] blur-[120px]" />
+
+        <div className="absolute right-[-12rem] top-[28rem] h-72 w-72 rounded-full bg-violet-500/[0.05] blur-[110px]" />
+
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.018)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.018)_1px,transparent_1px)] bg-[size:48px_48px] [mask-image:linear-gradient(to_bottom,black,transparent_75%)]" />
+      </div>
+
+      {/* Workspace content */}
+      <div className="relative mx-auto w-full max-w-7xl px-5 py-6 sm:px-8 sm:py-8 lg:px-10">
+        <WorkspaceListClient initialWorkspaces={workspaces} />
+      </div>
+    </main>
   );
 }

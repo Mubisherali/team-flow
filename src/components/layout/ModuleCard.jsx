@@ -1,35 +1,23 @@
 // -------------------------------------------------------------
-// ModuleCard - Reusable module row in the sidebar
-// -------------------------------------------------------------
-//
-// WHEN USED:
-//   Rendered inside the sidebar as a navigation item.
-//
-// STRUCTURE:
-//   <Link>
-//     - Active indicator bar (left)
-//     - Icon tile
-//     - Name + subtext
-//     - Optional badge
-//     - Chevron
-//
-// POLISH:
-//   - Focus-visible ring on link
-//   - active:scale-[0.99] for tactile press
-//   - aria-current="page" on active
-//   - Icon tile gets subtle inner ring for depth
-//   - Transitions normalized to duration-150
 //
 // PRESERVED:
-//   - Props (href, icon, iconBg, name, subtext, exact, badge)
-//   - isActive logic (exact vs. prefix match)
-//   - All visual structure
+//   - Props: href, icon, iconBg, name, subtext, exact, badge
+//   - Exact and nested-route active matching
+//   - Link navigation and optional badge
+//   - Existing iconBg styling
+//
+// POLISH:
+//   - Premium active state
+//   - Refined icon tile and typography
+//   - Subtle hover and press animations
+//   - Accessible focus ring and aria-current
+//   - Consistent with the polished Sidebar
 // -------------------------------------------------------------
 
-'use client';
+"use client";
 
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 const ModuleCard = ({
   href,
@@ -40,7 +28,7 @@ const ModuleCard = ({
   exact = false,
   badge,
 }) => {
-  const pathname = usePathname() || '';
+  const pathname = usePathname() || "";
 
   const isActive = exact
     ? pathname === href
@@ -49,68 +37,87 @@ const ModuleCard = ({
   return (
     <Link
       href={href}
-      aria-current={isActive ? 'page' : undefined}
+      aria-current={isActive ? "page" : undefined}
       className={`
-        group relative flex items-center gap-3
-        px-3 py-2.5 rounded-xl
-        focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40
+        group relative flex min-w-0 items-center gap-3
+        rounded-xl border px-3 py-2.5
+        outline-none transition-all duration-150 ease-out
         active:scale-[0.99]
-        transition-all duration-150
+        focus-visible:ring-2 focus-visible:ring-indigo-500
+        focus-visible:ring-offset-1
+        focus-visible:ring-offset-white
+        dark:focus-visible:ring-offset-[#0b0d12]
         ${
           isActive
-            ? 'bg-indigo-500/10 dark:bg-indigo-500/10'
-            : 'hover:bg-gray-100 dark:hover:bg-white/[0.04]'
+            ? "border-indigo-200/70 bg-indigo-50/80 shadow-sm shadow-indigo-950/[0.02] dark:border-indigo-400/15 dark:bg-indigo-500/[0.10]"
+            : "border-transparent hover:border-gray-200/80 hover:bg-gray-50 dark:hover:border-white/[0.06] dark:hover:bg-white/[0.035]"
         }
       `}
     >
-      {/* ─── Active indicator bar ─── */}
+      {/* Active indicator */}
       {isActive && (
         <span
           aria-hidden="true"
           className="
-            absolute left-0 top-1/2 -translate-y-1/2
-            w-[3px] h-4 rounded-r-full
-            bg-indigo-600 dark:bg-indigo-500
+            absolute bottom-2 left-0 top-2
+            w-[3px] rounded-r-full
+            bg-indigo-600 dark:bg-indigo-400
           "
         />
       )}
 
-      {/* ─── Icon tile ─── */}
+      {/* Icon tile */}
       <span
         className={`
-          w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0
-          ring-1 ring-inset ring-black/[0.02] dark:ring-white/[0.04]
-          transition-colors duration-150
-          ${iconBg}
+          relative flex h-8 w-8 shrink-0
+          items-center justify-center overflow-hidden
+          rounded-lg ring-1 ring-inset
+          transition-all duration-150
+          ${
+            isActive
+              ? "ring-indigo-500/15 shadow-sm shadow-indigo-950/[0.03]"
+              : "ring-black/[0.03] group-hover:ring-black/[0.06] dark:ring-white/[0.05] dark:group-hover:ring-white/[0.08]"
+          }
+          ${iconBg || "bg-gray-100 text-gray-600 dark:bg-white/[0.06] dark:text-gray-300"}
         `}
       >
-        {icon}
-      </span>
-
-      {/* ─── Text ─── */}
-      <span className="flex-1 min-w-0">
         <span
           className={`
-            block text-[13px] font-medium truncate
-            transition-colors duration-150
+            flex h-full w-full items-center justify-center
+            transition-transform duration-150
+            group-hover:scale-[1.04]
+            [&>svg]:h-4 [&>svg]:w-4
+          `}
+        >
+          {icon}
+        </span>
+      </span>
+
+      {/* Module name and subtitle */}
+      <span className="min-w-0 flex-1">
+        <span
+          className={`
+            block truncate text-[12.5px] font-semibold
+            tracking-[-0.01em] transition-colors duration-150
             ${
               isActive
-                ? 'text-indigo-700 dark:text-indigo-300'
-                : 'text-gray-800 dark:text-gray-200'
+                ? "text-indigo-700 dark:text-indigo-300"
+                : "text-gray-700 group-hover:text-gray-950 dark:text-gray-300 dark:group-hover:text-gray-100"
             }
           `}
         >
           {name}
         </span>
+
         {subtext && (
           <span
             className={`
-              block text-[10.5px] truncate mt-0.5
-              transition-colors duration-150
+              mt-0.5 block truncate text-[10.5px]
+              leading-4 transition-colors duration-150
               ${
                 isActive
-                  ? 'text-indigo-600/80 dark:text-indigo-400/80'
-                  : 'text-gray-500 dark:text-gray-500'
+                  ? "text-indigo-600/80 dark:text-indigo-300/70"
+                  : "text-gray-500 dark:text-gray-500"
               }
             `}
           >
@@ -119,46 +126,49 @@ const ModuleCard = ({
         )}
       </span>
 
-      {/* ─── Optional badge ─── */}
-      {badge && (
+      {/* Optional badge */}
+      {badge !== undefined && badge !== null && badge !== "" && (
         <span
-          className="
-            flex-shrink-0
-            text-[10px] font-bold
-            px-1.5 py-0.5 rounded-md
-            bg-gray-100 dark:bg-white/[0.06]
-            text-gray-500 dark:text-gray-400
-          "
+          className={`
+            inline-flex shrink-0 items-center justify-center
+            rounded-md border px-1.5 py-0.5
+            text-[10px] font-semibold tabular-nums
+            transition-colors duration-150
+            ${
+              isActive
+                ? "border-indigo-200/70 bg-white/70 text-indigo-700 dark:border-indigo-400/15 dark:bg-indigo-400/[0.08] dark:text-indigo-300"
+                : "border-gray-200/80 bg-white text-gray-500 dark:border-white/[0.07] dark:bg-white/[0.035] dark:text-gray-400"
+            }
+          `}
         >
           {badge}
         </span>
       )}
 
-      {/* ─── Chevron ─── */}
+      {/* Navigation chevron */}
       <span
         aria-hidden="true"
         className={`
-          w-4 h-4 flex items-center justify-center flex-shrink-0
+          flex h-5 w-5 shrink-0 items-center justify-center
           transition-all duration-150
           ${
             isActive
-              ? 'text-indigo-500 dark:text-indigo-400'
-              : 'text-gray-300 dark:text-gray-600 group-hover:text-gray-500 dark:group-hover:text-gray-400 group-hover:translate-x-0.5'
+              ? "translate-x-0 text-indigo-500 dark:text-indigo-400"
+              : "text-gray-300 group-hover:translate-x-0.5 group-hover:text-gray-500 dark:text-gray-600 dark:group-hover:text-gray-400"
           }
         `}
       >
         <svg
+          width="14"
+          height="14"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
-          strokeWidth="2"
-          aria-hidden="true"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
         >
-          <path
-            d="m9 18 6-6-6-6"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
+          <path d="m9 18 6-6-6-6" />
         </svg>
       </span>
     </Link>

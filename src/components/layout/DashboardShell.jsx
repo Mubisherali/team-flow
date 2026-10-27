@@ -2,9 +2,9 @@
 // DashboardShell - Client wrapper for the dashboard layout
 // -------------------------------------------------------------
 //
-// PHASE 11 (Shortcuts):
-//   - Integrated global keyboard shortcuts (G+W, C, N, ?)
-//   - Integrated Shortcuts cheat sheet modal
+// PHASE 11 (Layout Fix):
+//   - Properly handles mobile vs desktop sidebar rendering.
+//   - Grid layout: [Sidebar] [Navbar + Content]
 // -------------------------------------------------------------
 
 'use client';
@@ -18,11 +18,12 @@ import SidebarDrawer from './SidebarDrawer';
 import NotificationToaster from './NotificationToaster';
 import NotificationSound from './NotificationSound';
 import CommandPalette from './CommandPalette';
-import ShortcutsModal from './ShortcutsModal'; // <-- ADDED
+import ShortcutsModal from './ShortcutsModal';
+import TopNavbar from './TopNavbar';
 import { NotificationsProvider } from '@/context/NotificationsContext';
 import { useIsMobile } from '@/hooks/useMediaQuery';
 import { useHotkeys } from '@/hooks/useHotkeys';
-import { useAppShortcuts } from '@/hooks/useAppShortcuts'; // <-- ADDED
+import { useAppShortcuts } from '@/hooks/useAppShortcuts';
 import { Toaster } from 'react-hot-toast';
 
 const DashboardShell = ({ user, workspaces, children }) => {
@@ -31,65 +32,144 @@ const DashboardShell = ({ user, workspaces, children }) => {
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [shortcutsOpen, setShortcutsOpen] = useState(false); // <-- ADDED
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
-  const openDrawer = () => setDrawerOpen(true);
-  const closeDrawer = () => setDrawerOpen(false);
+  const [navMembers, setNavMembers] = useState([]);
+  const [navContextLabel, setNavContextLabel] = useState(null);
+  const [navMembersHref, setNavMembersHref] = useState(null);
 
-  // Context
   const workspaceId = params?.id;
   const projectId = params?.projectId;
   const isInsideProject = !!projectId;
 
-  // ─── Global Cmd+K listener ───
+  const openDrawer = () => setDrawerOpen(true);
+  const closeDrawer = () => setDrawerOpen(false);
+
   useHotkeys({
     onOpenSearch: () => setSearchOpen(true),
   });
 
-  // ─── Global App Shortcuts (G+W, C, N, ?) ───
   useAppShortcuts({
     workspaceId,
     isInsideProject,
-    // If inside a project, 'C' triggers Create Task
-    onCreateTask: () => {
-      // We dispatch a custom event that ProjectTasksSection listens to
-      window.dispatchEvent(new CustomEvent('open-create-task'));
-    },
-    // If inside a workspace, 'N' triggers Create Project
-    onCreateProject: () => {
-      // We dispatch a custom event that ProjectsSection listens to
-      window.dispatchEvent(new CustomEvent('open-create-project'));
-    },
+    onCreateTask: () => window.dispatchEvent(new CustomEvent('open-create-task')),
+    onCreateProject: () => window.dispatchEvent(new CustomEvent('open-create-project')),
   });
 
-  // ─── Listen for '?' to open Cheat Sheet ───
   useEffect(() => {
     const handleOpenShortcuts = () => setShortcutsOpen(true);
     window.addEventListener('open-shortcuts', handleOpenShortcuts);
     return () => window.removeEventListener('open-shortcuts', handleOpenShortcuts);
   }, []);
 
+  // Fetch navbar context
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadNavbarContext() {
+      if (!workspaceId) {
+        if (!cancelled) {
+          setNavMembers([]);
+          setNavContextLabel(null);
+          setNavMembersHref(null);
+        }
+        return;
+      }
+
+      try {
+        if (projectId) {
+          const [projRes, projMembersRes] = await Promise.all([
+            fetch(`/api/workspaces/${workspaceId}/projects/${projectId}`, { cache: 'no-store' }),
+            fetch(`/api/workspaces/${workspaceId}/projects/${projectId}/members`, { cache: 'no-store' }),
+          ]);
+
+          if (cancelled) return;
+
+          if (projRes.ok && projMembersRes.ok) {
+            const projData = await projRes.json();
+            const membersData = await projMembersRes.json();
+            setNavContextLabel(projData.project?.name || null);
+            setNavMembers(membersData.members || []);
+            setNavMembersHref(`/workspaces/${workspaceId}/projects/${projectId}#members`);
+          }
+        } else {
+          const [wsRes, wsMembersRes] = await Promise.all([
+            fetch(`/api/workspaces/${workspaceId}`, { cache: 'no-store' }),
+            fetch(`/api/workspaces/${workspaceId}/members`, { cache: 'no-store' }),
+          ]);
+
+          if (cancelled) return;
+
+          if (wsRes.ok && wsMembersRes.ok) {
+            const wsData = await wsRes.json();
+            const membersData = await wsMembersRes.json();
+            setNavContextLabel(wsData.workspace?.name || null);
+            setNavMembers(membersData.members || []);
+            setNavMembersHref(`/workspaces/${workspaceId}/members`);
+          }
+        }
+      } catch (err) {
+        if (!cancelled) {
+          console.error('[NAVBAR_CONTEXT_FETCH]', err);
+          setNavMembers([]);
+          setNavContextLabel(null);
+          setNavMembersHref(null);
+        }
+      }
+    }
+
+    loadNavbarContext();
+    return () => { cancelled = true; };
+  }, [workspaceId, projectId]);
+
   return (
     <NotificationsProvider>
-      <div className="min-h-screen flex flex-col lg:flex-row bg-gray-50 dark:bg-gray-950">
-        {/* Mobile top bar */}
-        <MobileTopbar user={user} onOpenSidebar={openDrawer} />
+      <div className="min-h-screen bg-gray-50 dark:bg-[#0b0d12]">
 
-        {/* Sidebar / Drawer */}
-        <SidebarDrawer
-          isOpen={drawerOpen}
-          onClose={closeDrawer}
-          isMobile={isMobile}
-        >
-          <Sidebar
-            user={user}
-            workspaces={workspaces}
-            onClose={isMobile ? closeDrawer : undefined}
-          />
-        </SidebarDrawer>
+        {/* ─── MOBILE ONLY: Top bar + Drawer ─── */}
+        <div className="lg:hidden">
+          <MobileTopbar user={user} onOpenSidebar={openDrawer} />
+          <SidebarDrawer
+            isOpen={drawerOpen}
+            onClose={closeDrawer}
+            isMobile={true}
+          >
+            <Sidebar
+              user={user}
+              workspaces={workspaces}
+              onClose={closeDrawer}
+            />
+          </SidebarDrawer>
+        </div>
 
-        {/* Main content */}
-        <main className="flex-1 min-w-0">{children}</main>
+        {/* ─── MAIN GRID (Desktop) ─── */}
+        <div className="lg:grid lg:grid-cols-[270px_1fr] lg:min-h-screen">
+
+          {/* Desktop Sidebar Column */}
+          <div className="hidden lg:block">
+            <div className="sticky top-0 h-screen overflow-y-auto">
+              <Sidebar user={user} workspaces={workspaces} />
+            </div>
+          </div>
+
+          {/* Right column: Navbar + Content */}
+          <div className="flex flex-col min-w-0">
+
+            {/* Desktop Navbar (hidden on mobile) */}
+            <div className="hidden lg:block sticky top-0 z-30">
+              <TopNavbar
+                user={user}
+                members={navMembers}
+                contextLabel={navContextLabel}
+                membersHref={navMembersHref}
+              />
+            </div>
+
+            <main className="flex-1 min-w-0">
+              {children}
+            </main>
+          </div>
+        </div>
 
         {/* Global Overlays */}
         <CommandPalette
@@ -104,7 +184,6 @@ const DashboardShell = ({ user, workspaces, children }) => {
           onClose={() => setShortcutsOpen(false)}
         />
 
-        {/* Toast portal */}
         <Toaster
           position="top-center"
           containerStyle={{ top: 20 }}
@@ -119,7 +198,6 @@ const DashboardShell = ({ user, workspaces, children }) => {
           }}
         />
 
-        {/* Notification effects */}
         <NotificationToaster />
         <NotificationSound />
       </div>
